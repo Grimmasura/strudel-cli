@@ -44,8 +44,12 @@ coverage/
 config/local.json
 .strudelrc
 
-# Samples (too large for git)
-samples/
+# Sample audio files (too large for git)
+/samples/
+/examples/**/*.wav
+/examples/**/*.mp3
+/examples/**/*.ogg
+/examples/**/*.flac
 *.wav
 *.mp3
 *.ogg
