@@ -157,7 +157,7 @@ describe('NativeMode', () => {
     });
 
     it('should validate pattern code', async () => {
-      await expect(nativeMode.play('')).rejects.toThrow(/cannot be empty/);
+      await expect(nativeMode.play('')).rejects.toThrow(/must be a non-empty string/);
       await expect(nativeMode.play('   ')).rejects.toThrow(/cannot be empty/);
       await expect(nativeMode.play(null)).rejects.toThrow(/must be a non-empty string/);
     });
@@ -315,6 +315,7 @@ describe('NativeMode', () => {
   describe('audio context creation', () => {
     it('should create audio context with default settings', async () => {
       vi.spyOn(nativeMode, '_checkBackendAvailable').mockResolvedValue(true);
+      config.set('audio.sampleRate', 48000); // Set explicit default
       await nativeMode.initialize();
 
       expect(nativeMode.audioContext.sampleRate).toBe(48000);

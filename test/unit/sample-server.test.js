@@ -9,6 +9,7 @@ import { SampleDownloader } from '../../src/samples/downloader.js';
 import { Config } from '../../src/core/config.js';
 import { Logger } from '../../src/core/logger.js';
 import fs from 'fs/promises';
+import { mkdtempSync } from 'fs';
 import os from 'os';
 import path from 'path';
 
@@ -20,7 +21,7 @@ describe('SampleServer', () => {
 
   beforeEach(() => {
     // Create temporary cache directory
-    testCacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'strudel-samples-test-'));
+    testCacheDir = mkdtempSync(path.join(os.tmpdir(), 'strudel-samples-test-'));
 
     config = new Config();
     config.set('samples.localPath', testCacheDir);
