@@ -90,14 +90,14 @@ export class Orchestrator {
       await this.initialize(options);
     }
 
-    // Import REPL dynamically when implemented
+    // Import and start REPL
     try {
       const { REPL } = await import('../repl/terminal.js');
       const repl = new REPL(this, options);
       await repl.start();
     } catch (error) {
-      this.logger.error(`REPL not yet implemented: ${error.message}`);
-      throw new Error('REPL functionality coming in next phase');
+      this.logger.error(`Failed to start REPL: ${error.message}`);
+      throw error;
     }
   }
 
