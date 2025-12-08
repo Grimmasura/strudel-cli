@@ -1,41 +1,329 @@
 /**
  * NativeMode - Native audio backend execution mode (ALSA/JACK/Pulse)
  *
+ * Uses native Linux audio backends for low-latency pattern playback.
+ * Phase 1 MVP: Basic ALSA backend foundation with pattern evaluation stub.
+ *
  * @module modes/native
  * @author Grimm (Joshua Robert Humphrey)
  * @license AGPL-3.0
  */
 
 import { BaseMode } from './base.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 export class NativeMode extends BaseMode {
+  /**
+   * Create a NativeMode instance
+   * @param {Config} config - Configuration instance
+   * @param {Logger} logger - Logger instance
+   */
   constructor(config, logger) {
     super('native', config, logger);
     this.audioContext = null;
     this.backend = null;
     this.evaluator = null;
+    this.isPlaying = false;
+    this.currentPattern = null;
   }
 
+  /**
+   * Initialize NativeMode with audio backend
+   * @param {object} options - Initialization options
+   * @returns {Promise<void>}
+   */
   async initialize(options = {}) {
     this.logger.info('Initializing Native mode...');
-    // TODO: Detect and create audio backend (ALSA/JACK/Pulse)
-    // TODO: Create native AudioContext polyfill
-    // TODO: Create pattern evaluator
-    throw new Error('NativeMode not yet implemented (Phase 1)');
+
+    try {
+      // Detect and select audio backend
+      const requestedBackend = options.backend || this.config.get('audio.backend') || 'auto';
+      this.backend = await this._selectBackend(requestedBackend);
+
+      this.logger.info(`Selected audio backend: ${this.backend}`);
+
+      // Phase 1 MVP: Create minimal audio context foundation
+      this.audioContext = this._createMinimalAudioContext();
+
+      // Phase 1 MVP: Pattern evaluator stub (full implementation in Phase 2)
+      this.evaluator = this._createPatternEvaluator();
+
+      this.logger.info('Native mode initialized successfully');
+      this.logger.warn('Native mode is in Phase 1 MVP - limited functionality');
+    } catch (error) {
+      this.logger.error(`Failed to initialize Native mode: ${error.message}`);
+      await this.cleanup();
+      throw error;
+    }
   }
 
+  /**
+   * Play a pattern with native audio backend
+   * @param {string} code - Pattern code to execute
+   * @param {object} options - Playback options
+   * @returns {Promise<void>}
+   */
   async play(code, options = {}) {
+    if (!this.audioContext) {
+      throw new Error('NativeMode not initialized. Call initialize() first.');
+    }
+
     this.logger.info('Playing pattern in Native mode');
-    // TODO: Evaluate pattern with native audio
-    throw new Error('NativeMode.play() not yet implemented');
+    this.logger.debug(`Pattern code: ${code.substring(0, 100)}...`);
+    this.logger.warn('Phase 1 MVP: Pattern evaluation is stubbed (full implementation in Phase 2)');
+
+    try {
+      // Store current pattern
+      this.currentPattern = code;
+
+      // Phase 1 MVP: Validate pattern syntax (basic check)
+      this._validatePattern(code);
+
+      // Phase 1 MVP: Pattern evaluation stub
+      // Full implementation requires @strudel/core integration in Phase 2
+      await this.evaluator.evaluate(code);
+
+      this.isPlaying = true;
+      this.logger.info('Pattern playback started (stubbed)');
+      this.logger.debug(`Backend: ${this.backend}, Sample rate: ${this.audioContext.sampleRate}Hz`);
+    } catch (error) {
+      this.logger.error(`Failed to play pattern: ${error.message}`);
+      throw error;
+    }
   }
 
+  /**
+   * Stop playback
+   * @returns {Promise<void>}
+   */
   async stop() {
-    // TODO: Stop playback
+    if (!this.audioContext) {
+      this.logger.warn('No audio context available to stop');
+      return;
+    }
+
+    this.logger.info('Stopping Native mode playback...');
+
+    try {
+      // Phase 1 MVP: Stop pattern evaluation
+      if (this.evaluator) {
+        await this.evaluator.stop();
+      }
+
+      this.isPlaying = false;
+      this.currentPattern = null;
+      this.logger.info('Playback stopped');
+    } catch (error) {
+      this.logger.error(`Error stopping playback: ${error.message}`);
+      throw error;
+    }
   }
 
+  /**
+   * Cleanup resources and close audio backend
+   * @returns {Promise<void>}
+   */
   async cleanup() {
     await super.cleanup();
-    // TODO: Cleanup audio backend
+
+    if (this.evaluator) {
+      try {
+        await this.evaluator.cleanup();
+        this.logger.debug('Pattern evaluator cleaned up');
+      } catch (error) {
+        this.logger.warn(`Error cleaning up evaluator: ${error.message}`);
+      }
+      this.evaluator = null;
+    }
+
+    if (this.audioContext) {
+      try {
+        // Phase 1 MVP: Minimal cleanup (full AudioContext.close() in Phase 2)
+        this.audioContext = null;
+        this.logger.debug('Audio context released');
+      } catch (error) {
+        this.logger.warn(`Error releasing audio context: ${error.message}`);
+      }
+    }
+
+    this.backend = null;
+    this.isPlaying = false;
+    this.currentPattern = null;
+  }
+
+  /**
+   * Get current playback state
+   * @returns {object} Playback state
+   */
+  getState() {
+    return {
+      mode: this.name,
+      isPlaying: this.isPlaying,
+      backend: this.backend,
+      audioContextActive: this.audioContext !== null,
+      evaluatorActive: this.evaluator !== null,
+      sampleRate: this.audioContext?.sampleRate || null,
+      currentPattern: this.currentPattern ? this.currentPattern.substring(0, 50) + '...' : null
+    };
+  }
+
+  /**
+   * Select audio backend based on availability and preference
+   * @param {string} requestedBackend - Requested backend (auto|alsa|jack|pulse)
+   * @returns {Promise<string>} Selected backend name
+   * @private
+   */
+  async _selectBackend(requestedBackend) {
+    this.logger.debug(`Backend selection: requested=${requestedBackend}`);
+
+    // If specific backend requested, verify availability
+    if (requestedBackend !== 'auto') {
+      const available = await this._checkBackendAvailable(requestedBackend);
+      if (available) {
+        return requestedBackend;
+      } else {
+        this.logger.warn(`Requested backend ${requestedBackend} not available, falling back to auto-detection`);
+      }
+    }
+
+    // Auto-detect optimal backend (priority: JACK > ALSA > PulseAudio)
+    const backends = ['jack', 'alsa', 'pulse'];
+    for (const backend of backends) {
+      const available = await this._checkBackendAvailable(backend);
+      if (available) {
+        this.logger.debug(`Auto-selected backend: ${backend}`);
+        return backend;
+      }
+    }
+
+    throw new Error(
+      'No native audio backend available. Please install ALSA, JACK, or PulseAudio.\n' +
+      'Or use web mode: strudel repl --mode web'
+    );
+  }
+
+  /**
+   * Check if audio backend is available on system
+   * @param {string} backend - Backend to check (alsa|jack|pulse)
+   * @returns {Promise<boolean>} Backend availability
+   * @private
+   */
+  async _checkBackendAvailable(backend) {
+    try {
+      switch (backend) {
+        case 'alsa':
+          // Check for ALSA utilities
+          await execAsync('which aplay');
+          this.logger.debug('ALSA backend available');
+          return true;
+
+        case 'jack':
+          // Check for JACK daemon or utilities
+          try {
+            await execAsync('which jack_lsp');
+            this.logger.debug('JACK backend available');
+            return true;
+          } catch {
+            // Also check if jackd is running
+            try {
+              await execAsync('pgrep -x jackd');
+              this.logger.debug('JACK backend available (daemon running)');
+              return true;
+            } catch {
+              return false;
+            }
+          }
+
+        case 'pulse':
+          // Check for PulseAudio utilities
+          await execAsync('which pactl');
+          this.logger.debug('PulseAudio backend available');
+          return true;
+
+        default:
+          this.logger.warn(`Unknown backend: ${backend}`);
+          return false;
+      }
+    } catch (error) {
+      this.logger.debug(`Backend ${backend} not available: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Create minimal audio context for Phase 1 MVP
+   * Full WebAudio API polyfill implementation in Phase 2
+   * @returns {object} Minimal audio context
+   * @private
+   */
+  _createMinimalAudioContext() {
+    const sampleRate = this.config.get('audio.sampleRate') || 48000;
+    const bufferSize = this.config.get('audio.bufferSize') || 256;
+    const channels = this.config.get('audio.channels') || 2;
+
+    this.logger.debug(`Creating audio context: ${sampleRate}Hz, ${bufferSize} samples, ${channels} channels`);
+
+    // Phase 1 MVP: Minimal context structure
+    // Phase 2 will implement full AudioContext polyfill
+    return {
+      sampleRate,
+      bufferSize,
+      channels,
+      currentTime: 0,
+      state: 'running',
+      // Stub methods for Phase 2
+      createOscillator: () => { throw new Error('Not implemented in Phase 1'); },
+      createGain: () => { throw new Error('Not implemented in Phase 1'); },
+      createBuffer: () => { throw new Error('Not implemented in Phase 1'); }
+    };
+  }
+
+  /**
+   * Create pattern evaluator for Strudel patterns
+   * Phase 1 MVP: Stub implementation
+   * @returns {object} Pattern evaluator
+   * @private
+   */
+  _createPatternEvaluator() {
+    this.logger.debug('Creating pattern evaluator (Phase 1 MVP stub)');
+
+    // Phase 1 MVP: Return stub evaluator
+    // Phase 2 will integrate @strudel/core for actual evaluation
+    return {
+      evaluate: async (code) => {
+        this.logger.debug(`Evaluator stub: would evaluate pattern (${code.length} chars)`);
+        // Simulate pattern acceptance
+        return { success: true, message: 'Pattern accepted (Phase 1 stub)' };
+      },
+      stop: async () => {
+        this.logger.debug('Evaluator stub: stopping pattern');
+      },
+      cleanup: async () => {
+        this.logger.debug('Evaluator stub: cleanup');
+      }
+    };
+  }
+
+  /**
+   * Validate pattern syntax (basic check)
+   * @param {string} code - Pattern code
+   * @throws {Error} If pattern is invalid
+   * @private
+   */
+  _validatePattern(code) {
+    if (!code || typeof code !== 'string') {
+      throw new Error('Pattern code must be a non-empty string');
+    }
+
+    if (code.trim().length === 0) {
+      throw new Error('Pattern code cannot be empty');
+    }
+
+    // Phase 1 MVP: Basic syntax validation
+    // Phase 2 will use full Strudel parser
+    this.logger.debug(`Pattern validation: ${code.length} characters`);
   }
 }
