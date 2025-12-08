@@ -1,0 +1,146 @@
+/**
+ * Strudel CLI - Command Line Interface Setup
+ *
+ * Defines all CLI commands and options using Commander.js
+ *
+ * @module cli
+ * @author Grimm (Joshua Robert Humphrey)
+ * @license AGPL-3.0
+ */
+
+import { program } from 'commander';
+import chalk from 'chalk';
+import { VERSION } from './index.js';
+
+/**
+ * Main CLI function
+ * @param {string[]} argv - Command line arguments
+ */
+export async function cli(argv) {
+  program
+    .name('strudel')
+    .description('Hybrid command-line interface for Strudel live coding')
+    .version(VERSION, '-v, --version', 'Output the current version');
+
+  // Global options
+  program
+    .option('--config <path>', 'Use custom config file')
+    .option('--verbose', 'Enable verbose logging')
+    .option('--quiet', 'Suppress all output except errors');
+
+  // Command: play <file>
+  program
+    .command('play <file>')
+    .description('Play a Strudel pattern file')
+    .option('-m, --mode <mode>', 'Backend mode (auto|web|native|osc)', 'auto')
+    .option('-s, --samples <path>', 'Local samples directory')
+    .option('--offline', 'Use only local assets')
+    .option('--no-autoplay', 'Load without playing')
+    .action(async (file, options) => {
+      console.log(chalk.blue('🎵 Strudel CLI - Play Mode'));
+      console.log(chalk.gray(`File: ${file}`));
+      console.log(chalk.gray(`Mode: ${options.mode}`));
+      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+
+      // TODO: Import and use Orchestrator
+      // const { Orchestrator } = await import('./core/orchestrator.js');
+      // const orchestrator = new Orchestrator(config, logger);
+      // await orchestrator.play(file, options);
+    });
+
+  // Command: repl
+  program
+    .command('repl')
+    .description('Start interactive REPL')
+    .option('-m, --mode <mode>', 'Audio backend mode', 'auto')
+    .option('--theme <theme>', 'REPL theme (dark|light)', 'dark')
+    .option('--no-banner', 'Hide startup banner')
+    .action(async (options) => {
+      console.log(chalk.blue('🎹 Strudel CLI - REPL Mode'));
+      console.log(chalk.gray(`Mode: ${options.mode}`));
+      console.log(chalk.gray(`Theme: ${options.theme}`));
+      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+
+      // TODO: Import and use REPL
+      // const { REPL } = await import('./repl/terminal.js');
+      // const repl = new REPL(options);
+      // await repl.start();
+    });
+
+  // Command: serve
+  program
+    .command('serve')
+    .description('Start sample server + web REPL')
+    .option('-p, --port <port>', 'Server port', '3000')
+    .option('-h, --host <host>', 'Server host', '0.0.0.0')
+    .option('-s, --samples <path>', 'Samples directory')
+    .action(async (options) => {
+      console.log(chalk.blue('🌐 Strudel CLI - Server Mode'));
+      console.log(chalk.gray(`Host: ${options.host}:${options.port}`));
+      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+
+      // TODO: Import and use Server
+      // const { SampleServer } = await import('./samples/server.js');
+      // const server = new SampleServer(options);
+      // await server.start();
+    });
+
+  // Command: init
+  program
+    .command('init')
+    .description('Initialize Strudel environment')
+    .option('--samples', 'Download default sample packs')
+    .option('--config <preset>', 'Use configuration preset')
+    .action(async (options) => {
+      console.log(chalk.blue('🚀 Strudel CLI - Initialize'));
+      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+
+      // TODO: Implement initialization
+      // - Create config directory
+      // - Download samples if requested
+      // - Apply configuration preset
+    });
+
+  // Command: config
+  program
+    .command('config')
+    .description('Manage configuration')
+    .argument('[key]', 'Configuration key to view/edit')
+    .argument('[value]', 'New value to set')
+    .action(async (key, value, options) => {
+      console.log(chalk.blue('⚙️  Strudel CLI - Configuration'));
+      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+
+      // TODO: Implement config management
+    });
+
+  // Command: samples
+  program
+    .command('samples')
+    .description('Manage sample libraries')
+    .argument('[action]', 'Action: list|download|update')
+    .action(async (action, options) => {
+      console.log(chalk.blue('📦 Strudel CLI - Sample Management'));
+      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+
+      // TODO: Implement sample management
+    });
+
+  // Command: doctor
+  program
+    .command('doctor')
+    .description('Run system diagnostics')
+    .action(async (options) => {
+      console.log(chalk.blue('🏥 Strudel CLI - System Diagnostics'));
+      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+
+      // TODO: Implement system diagnostics
+      // - Check Node.js version
+      // - Detect available audio backends
+      // - Test sample access
+      // - Verify dependencies
+    });
+
+  // Parse arguments
+  await program.parseAsync(argv);
+}

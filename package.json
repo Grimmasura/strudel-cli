@@ -1,0 +1,86 @@
+{
+  "name": "strudel-cli",
+  "version": "0.1.0",
+  "description": "Hybrid command-line interface for the Strudel live coding environment",
+  "main": "src/index.js",
+  "bin": {
+    "strudel": "./bin/strudel.js"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node bin/strudel.js",
+    "dev": "node --watch bin/strudel.js repl",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "test:unit": "NODE_OPTIONS='--experimental-vm-modules' jest test/unit",
+    "test:integration": "NODE_OPTIONS='--experimental-vm-modules' jest test/integration",
+    "test:e2e": "NODE_OPTIONS='--experimental-vm-modules' jest test/e2e",
+    "lint": "eslint src test",
+    "format": "prettier --write 'src/**/*.js' 'test/**/*.js'",
+    "docs": "jsdoc -c jsdoc.json",
+    "build": "pkg package.json",
+    "prepare": "husky install"
+  },
+  "keywords": [
+    "strudel",
+    "tidal",
+    "tidalcycles",
+    "live-coding",
+    "algorithmic-music",
+    "cli",
+    "repl",
+    "audio",
+    "music",
+    "performance"
+  ],
+  "author": "Grimm (Joshua Robert Humphrey)",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Grimmasura/strudel-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Grimmasura/strudel-cli/issues"
+  },
+  "homepage": "https://github.com/Grimmasura/strudel-cli#readme",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "@strudel/core": "^1.0.0",
+    "@strudel/mini": "^1.0.0",
+    "@strudel/transpiler": "^1.0.0",
+    "@strudel/tonal": "^1.0.0",
+    "commander": "^11.0.0",
+    "inquirer": "^9.0.0",
+    "chalk": "^5.0.0",
+    "ora": "^7.0.0",
+    "conf": "^12.0.0",
+    "dotenv": "^16.0.0",
+    "pino": "^8.0.0",
+    "pino-pretty": "^10.0.0"
+  },
+  "optionalDependencies": {
+    "puppeteer": "^21.0.0",
+    "node-jack": "^0.1.0",
+    "pulseaudio": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.0.0",
+    "prettier": "^3.0.0",
+    "husky": "^8.0.0",
+    "lint-staged": "^14.0.0",
+    "jest": "^29.0.0",
+    "jsdoc": "^4.0.0",
+    "pkg": "^5.8.0"
+  },
+  "lint-staged": {
+    "*.js": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  }
+}
