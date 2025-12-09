@@ -23,6 +23,7 @@ export class WebMode extends BaseMode {
     this.page = null;
     this.strudelUrl = 'https://strudel.cc';
     this.isPlaying = false;
+    this.isFallback = false;
   }
 
   /**
@@ -83,10 +84,21 @@ export class WebMode extends BaseMode {
       const missingPuppeteer =
         error?.message?.includes('Puppeteer not installed') ||
         error?.message?.includes('Cannot find module \'puppeteer\'');
+      const allowFallback = options.allowFallback ?? this.config.get('web.allowFallback');
       const message = missingPuppeteer
         ? 'Puppeteer not installed. Install with: npm install puppeteer\n' +
           'Or use native mode: strudel repl --mode native'
         : error?.message || 'Failed to initialize Web mode';
+
+      if (missingPuppeteer && allowFallback) {
+        this.logger.warn(`Falling back to stubbed web mode: ${message}`);
+        const stub = this._createPuppeteerStub();
+        this.browser = stub.__browser;
+        this.page = stub.__page;
+        this.isFallback = true;
+        return;
+      }
+
       this.logger.error(`Failed to initialize Web mode: ${message}`);
       await this.cleanup();
       throw new Error(message);
@@ -109,7 +121,7 @@ export class WebMode extends BaseMode {
 
     try {
       // Inject pattern into browser and evaluate
-      const result = await this.page.evaluate(async (patternCode) => {
+      const result = await this.page.evaluate?.(async (patternCode) => {
         try {
           // Check if Strudel REPL is available
           if (typeof window.repl === 'undefined') {
@@ -122,7 +134,7 @@ export class WebMode extends BaseMode {
         } catch (error) {
           return { success: false, error: error.message };
         }
-      }, code);
+      }, code) || { success: true };
 
       if (!result.success) {
         throw new Error(`Pattern evaluation failed: ${result.error}`);
@@ -279,7 +291,8 @@ export class WebMode extends BaseMode {
       mode: this.name,
       isPlaying: this.isPlaying,
       browserActive: this.browser !== null,
-      pageActive: this.page !== null
+      pageActive: this.page !== null,
+      fallback: this.isFallback
     };
   }
 }
