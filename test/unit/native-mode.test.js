@@ -7,6 +7,10 @@ import { NativeMode } from '../../src/modes/native.js';
 import { Config } from '../../src/core/config.js';
 import { Logger } from '../../src/core/logger.js';
 import { PipeWireBackend } from '../../src/audio/backends/pipewire.js';
+import { AlsaBackend } from '../../src/audio/backends/alsa.js';
+import { PulseAudioBackend } from '../../src/audio/backends/pulse.js';
+import { JackBackend } from '../../src/audio/backends/jack.js';
+import * as strudel from '@strudel/core';
 
 describe('NativeMode', () => {
   let nativeMode;
@@ -25,6 +29,15 @@ describe('NativeMode', () => {
     vi.spyOn(PipeWireBackend.prototype, 'stop').mockResolvedValue();
     vi.spyOn(PipeWireBackend.prototype, 'cleanup').mockResolvedValue();
     vi.spyOn(PipeWireBackend.prototype, 'playSineWave').mockResolvedValue();
+    vi.spyOn(AlsaBackend.prototype, 'initialize').mockResolvedValue();
+    vi.spyOn(AlsaBackend.prototype, 'stop').mockResolvedValue();
+    vi.spyOn(AlsaBackend.prototype, 'cleanup').mockResolvedValue();
+    vi.spyOn(PulseAudioBackend.prototype, 'initialize').mockResolvedValue();
+    vi.spyOn(PulseAudioBackend.prototype, 'stop').mockResolvedValue();
+    vi.spyOn(PulseAudioBackend.prototype, 'cleanup').mockResolvedValue();
+    vi.spyOn(JackBackend.prototype, 'initialize').mockResolvedValue();
+    vi.spyOn(JackBackend.prototype, 'stop').mockResolvedValue();
+    vi.spyOn(JackBackend.prototype, 'cleanup').mockResolvedValue();
   });
 
   afterEach(async () => {
@@ -373,7 +386,7 @@ describe('NativeMode', () => {
 
     it('should accept pattern evaluation in Phase 1 stub', async () => {
       const result = await nativeMode.evaluator.evaluate('sound("bd")');
-      expect(result.name).toBe('sound');
+      expect(strudel.isPattern(result)).toBe(true);
     });
 
     it('should call evaluator stop on mode stop', async () => {

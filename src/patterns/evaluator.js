@@ -2,8 +2,7 @@
  * PatternEvaluator - Secure sandbox for Strudel pattern evaluation
  *
  * Uses vm2 to execute pattern code in an isolated environment with a restricted
- * scope. Provides basic pattern helpers for early alpha without exposing Node
- * built-ins or require/process access.
+ * scope. Provides Strudel core/mini helpers while blocking Node built-ins.
  *
  * @module patterns/evaluator
  * @author Grimm (Joshua Robert Humphrey)
@@ -11,6 +10,8 @@
  */
 
 import { VM } from 'vm2';
+import * as strudel from '@strudel/core';
+import { mini, m, h } from '@strudel/mini';
 
 export class PatternEvaluationError extends Error {
   constructor(message) {
@@ -18,34 +19,6 @@ export class PatternEvaluationError extends Error {
     this.name = 'PatternEvaluationError';
   }
 }
-
-/**
- * Create a minimal "pattern" object that supports fluent chaining.
- * This is a lightweight placeholder until full @strudel/core integration.
- */
-const createPatternFactory = (name) => {
-  const factory = (...args) => {
-    const pattern = {
-      name,
-      args,
-      chain: []
-    };
-
-    const chainable = (method) => (...methodArgs) => {
-      pattern.chain.push({ method, args: methodArgs });
-      return pattern;
-    };
-
-    pattern.s = chainable('s');
-    pattern.fast = chainable('fast');
-    pattern.stack = chainable('stack');
-    pattern.slow = chainable('slow');
-
-    return pattern;
-  };
-
-  return factory;
-};
 
 const createSafeConsole = (logger) => ({
   log: (...args) => logger?.debug?.(args.join(' ')),
@@ -116,15 +89,21 @@ export class PatternEvaluator {
   }
 
   _buildScope(overrides) {
-    const patternFns = {
-      note: createPatternFactory('note'),
-      sound: createPatternFactory('sound'),
-      s: createPatternFactory('s')
-    };
-
     const safeScope = {
       Math,
       console: createSafeConsole(this.logger),
+      // Expose Strudel helpers
+      strudel,
+      note: strudel.note,
+      sound: strudel.sound,
+      s: strudel.s,
+      stack: strudel.stack,
+      seq: strudel.seq,
+      hush: strudel.silence,
+      mini,
+      m,
+      h,
+      isPattern: strudel.isPattern,
       // Explicitly block dangerous globals
       require: undefined,
       process: undefined,
@@ -137,7 +116,6 @@ export class PatternEvaluator {
       setImmediate: undefined,
       setInterval: undefined,
       setTimeout: undefined,
-      ...patternFns,
       ...overrides
     };
 

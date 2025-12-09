@@ -50,9 +50,11 @@ describe('REPL', () => {
       expect(typeof repl.commands['.exit']).toBe('function');
       expect(typeof repl.commands['.quit']).toBe('function');
       expect(typeof repl.commands['.stop']).toBe('function');
+      expect(typeof repl.commands['.hush']).toBe('function');
       expect(typeof repl.commands['.play']).toBe('function');
       expect(typeof repl.commands['.mode']).toBe('function');
       expect(typeof repl.commands['.status']).toBe('function');
+      expect(typeof repl.commands['.bpm']).toBe('function');
       expect(typeof repl.commands['.clear']).toBe('function');
       expect(typeof repl.commands['.history']).toBe('function');
     });

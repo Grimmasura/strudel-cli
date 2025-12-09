@@ -15,6 +15,10 @@ import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 export class SampleDownloader {
   /**
@@ -65,6 +69,17 @@ export class SampleDownloader {
       downloadedAt: now
     };
     await this.cache._saveManifest();
+
+    // Extract archives if requested
+    if (options.extract !== false && this._isArchive(absPath)) {
+      const extractTarget = path.join(
+        this.cache.cacheDir,
+        path.join(path.dirname(targetPath), path.parse(targetPath).name)
+      );
+      await this._extractArchive(absPath, extractTarget);
+      this.cache.manifest.packs[url].extractedTo = extractTarget;
+      await this.cache._saveManifest();
+    }
 
     return absPath;
   }
@@ -189,6 +204,26 @@ export class SampleDownloader {
       cacheDir: this.cache.cacheDir,
       concurrent: this.concurrent
     };
+  }
+
+  _isArchive(filePath) {
+    return /\.(zip|tar\.gz|tgz)$/i.test(filePath);
+  }
+
+  async _extractArchive(archivePath, targetDir) {
+    await fs.mkdir(targetDir, { recursive: true });
+
+    if (archivePath.endsWith('.zip')) {
+      await execFileAsync('unzip', ['-o', archivePath, '-d', targetDir]);
+      return;
+    }
+
+    if (archivePath.endsWith('.tar.gz') || archivePath.endsWith('.tgz')) {
+      await execFileAsync('tar', ['-xzf', archivePath, '-C', targetDir]);
+      return;
+    }
+
+    throw new Error(`Unsupported archive format: ${archivePath}`);
   }
 
   /**
