@@ -13,6 +13,8 @@ import { VM } from 'vm2';
 import * as strudel from '@strudel/core';
 import { mini, m, h } from '@strudel/mini';
 import { transpiler } from '@strudel/transpiler';
+import { registerLanguage } from '@strudel/transpiler';
+import { getLeafLocations } from '@strudel/mini';
 
 export class PatternEvaluationError extends Error {
   constructor(message) {
@@ -34,11 +36,13 @@ export class PatternEvaluator {
    * @param {Logger} logger - Logger instance
    * @param {object} scopeOverrides - Additional scope bindings
    * @param {number} timeoutMs - Execution timeout in ms
+   * @param {Function} onPattern - Callback when a pattern is produced
    */
-  constructor(audioContext, logger, scopeOverrides = {}, timeoutMs = 5000) {
+  constructor(audioContext, logger, scopeOverrides = {}, timeoutMs = 5000, onPattern = null) {
     this.audioContext = audioContext;
     this.logger = logger;
     this.timeoutMs = timeoutMs;
+    this.onPattern = onPattern;
     this.scope = this._buildScope(scopeOverrides);
     this.vm = new VM({
       timeout: this.timeoutMs,
@@ -47,6 +51,11 @@ export class PatternEvaluator {
       wasm: false,
       allowAsync: true,
       wrapper: 'none'
+    });
+
+    // Register mini language once for transpiler
+    registerLanguage('minilang', {
+      getLocations: (code, offset) => getLeafLocations(`"${code}"`, offset, code)
     });
   }
 
@@ -66,10 +75,13 @@ export class PatternEvaluator {
     }
 
     try {
-      const transpiled = transpiler(trimmed, { addReturn: true, wrapAsync: false });
-      const wrapped = `(async () => { ${transpiled.output} })()`;
-      const pattern = await this.vm.run(wrapped);
+    const transpiled = transpiler(trimmed, { addReturn: true, wrapAsync: false });
+    const wrapped = `(async () => { ${transpiled.output} })()`;
+    const pattern = await this.vm.run(wrapped);
       this.logger?.debug?.('Pattern evaluated in sandbox');
+      if (this.onPattern) {
+        await this.onPattern(pattern);
+      }
       return pattern;
     } catch (error) {
       const sanitized = this._sanitizeError(error);

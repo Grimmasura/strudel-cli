@@ -338,7 +338,10 @@ export class NativeMode extends BaseMode {
    */
   _createPatternEvaluator() {
     this.logger.debug('Creating pattern evaluator (vm2 sandbox)');
-    return new PatternEvaluator(this.audioContext, this.logger);
+    return new PatternEvaluator(this.audioContext, this.logger, {}, 5000, async (pattern) => {
+      // TODO: Hook pattern into audio scheduling engine
+      this.logger.debug(`Pattern received (type=${pattern?.constructor?.name || typeof pattern})`);
+    });
   }
 
   /**
