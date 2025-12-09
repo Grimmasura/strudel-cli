@@ -6,7 +6,7 @@ export class AlsaBackend extends SpawnBackend {
       binary: config?.get('audio.alsa.binary') || 'aplay',
       sampleRate: config?.get('audio.sampleRate') || 48000,
       channels: config?.get('audio.channels') || 2,
-      format: 'FLOAT_LE',
+      format: config?.get('audio.alsa.format') || 'FLOAT_LE',
       argsBuilder: ({ sampleRate, channels, format }) => ['-f', format, '-c', String(channels), '-r', String(sampleRate), '-'],
       logger
     });

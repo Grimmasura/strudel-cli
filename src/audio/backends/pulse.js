@@ -6,7 +6,7 @@ export class PulseAudioBackend extends SpawnBackend {
       binary: config?.get('audio.pulse.binary') || 'paplay',
       sampleRate: config?.get('audio.sampleRate') || 48000,
       channels: config?.get('audio.channels') || 2,
-      format: 'float32le',
+      format: config?.get('audio.pulse.format') || 'float32le',
       argsBuilder: ({ sampleRate, channels, format }) => [
         '--raw',
         '--rate',
