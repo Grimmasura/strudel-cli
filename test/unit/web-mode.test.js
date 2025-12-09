@@ -48,7 +48,18 @@ describe('WebMode', () => {
         new Error('Cannot find module \'puppeteer\'')
       );
 
-      await expect(webMode.initialize()).rejects.toThrow(/Puppeteer not installed/);
+      await expect(webMode.initialize({ allowFallback: false })).rejects.toThrow(/Puppeteer not installed/);
+    });
+
+    it('should fallback to stub when Puppeteer missing and fallback allowed', async () => {
+      vi.spyOn(webMode, '_loadPuppeteer').mockRejectedValue(
+        new Error('Cannot find module \'puppeteer\'')
+      );
+
+      await expect(webMode.initialize({ allowFallback: true })).resolves.not.toThrow();
+      expect(webMode.isFallback).toBe(true);
+      const state = webMode.getState();
+      expect(state.fallback).toBe(true);
     });
   });
 

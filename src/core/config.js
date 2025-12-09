@@ -37,6 +37,9 @@ export class Config {
         latency: 10,
         bpm: 120
       },
+      web: {
+        allowFallback: true
+      },
       samples: {
         localPath: process.env.STRUDEL_SAMPLES_DIR || '~/.strudel/samples',
         autoDownload: false
