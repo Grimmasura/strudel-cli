@@ -211,10 +211,13 @@ strudel-cli/
 
 - ✅ CLI framework and configuration
 - ✅ Project structure scaffolding
-- ⏳ Web mode (Puppeteer) - *In Progress*
-- ⏳ Native ALSA backend - *In Progress*
-- ⏳ Terminal REPL - *In Progress*
-- ⏳ Sample server - *Planned*
+- ✅ Native PipeWire backend (MVP)
+- ✅ Sandbox pattern evaluator (vm2)
+- ✅ Terminal REPL with completion/visualizer scaffold
+- ✅ Sample cache with hashes and manifest (offline-ready)
+- ⏳ Web mode (Puppeteer) – fallback/stub in tests
+- ⏳ Sample downloader (packs) – streaming + checksum; archive extraction pending
+- ⏳ Sample server
 
 ### Phase 2: Audio Backends (Q1 2026)
 
