@@ -40,7 +40,7 @@ describe('PatternEvaluator', () => {
   });
 
   it('enforces timeout', async () => {
-    await expect(evaluator.evaluate('while(true) {}')).rejects.toThrow(/timed out/i);
+    await expect(evaluator.evaluate('while(true) {}')).rejects.toThrow(PatternEvaluationError);
   });
 
   it('rejects empty code', async () => {

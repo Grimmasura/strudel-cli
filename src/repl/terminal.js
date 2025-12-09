@@ -35,6 +35,7 @@ export class REPL {
     this.multilineBuffer = [];
     this.inMultilineMode = false;
     this.visualizer = new TerminalVisualizer({ enabled: this.options.visualize, logger: orchestrator.logger });
+    this.cycleCounter = 0;
     this.strudelCompletions = this.options.completions || [
       'note',
       'sound',
@@ -455,12 +456,17 @@ export class REPL {
     const latency = state.latencyMs || this.orchestrator.config?.get?.('audio.latency') || null;
     this.visualizer.render({
       pattern,
-      cycle: state.cycle || 0,
+      cycle: state.cycle || this._nextCycle(),
       bpm: state.bpm || 120,
       cpu: state.cpu || 0,
       latencyMs: latency,
       playing: state.isPlaying || false
     });
+  }
+
+  _nextCycle() {
+    this.cycleCounter += 0.25;
+    return this.cycleCounter;
   }
 
   /**

@@ -12,6 +12,7 @@
 import { VM } from 'vm2';
 import * as strudel from '@strudel/core';
 import { mini, m, h } from '@strudel/mini';
+import { transpiler } from '@strudel/transpiler';
 
 export class PatternEvaluationError extends Error {
   constructor(message) {
@@ -44,7 +45,7 @@ export class PatternEvaluator {
       sandbox: this.scope,
       eval: false,
       wasm: false,
-      allowAsync: false,
+      allowAsync: true,
       wrapper: 'none'
     });
   }
@@ -65,9 +66,11 @@ export class PatternEvaluator {
     }
 
     try {
-      const result = this.vm.run(trimmed);
+      const transpiled = transpiler(trimmed, { addReturn: true, wrapAsync: false });
+      const wrapped = `(async () => { ${transpiled.output} })()`;
+      const pattern = await this.vm.run(wrapped);
       this.logger?.debug?.('Pattern evaluated in sandbox');
-      return result;
+      return pattern;
     } catch (error) {
       const sanitized = this._sanitizeError(error);
       throw new PatternEvaluationError(sanitized);
