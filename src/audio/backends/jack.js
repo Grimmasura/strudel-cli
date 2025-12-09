@@ -1,39 +1,18 @@
-import { EventEmitter } from 'events';
+import { SpawnBackend } from './spawn-backend.js';
 
-/**
- * JackBackend - placeholder stub until dedicated JACK streaming is implemented.
- */
-export class JackBackend extends EventEmitter {
+export class JackBackend extends SpawnBackend {
   constructor(config, logger) {
-    super();
-    this.config = config;
-    this.logger = logger;
-    this.initialized = false;
+    super({
+      binary: config?.get('audio.jack.binary') || 'jack_play',
+      sampleRate: config?.get('audio.sampleRate') || 48000,
+      channels: config?.get('audio.channels') || 2,
+      format: 'float', // jack_play expects float
+      argsBuilder: ({ sampleRate, channels }) => ['-r', String(sampleRate), '-c', String(channels), '-f', '16'],
+      logger
+    });
   }
 
-  async initialize() {
-    this.initialized = true;
-    this.logger?.warn?.('JACK backend stub initialized (audio streaming not yet implemented)');
-  }
-
-  async playBuffer() {
-    throw new Error('JACK backend playback not yet implemented');
-  }
-
-  async playSineWave() {
-    throw new Error('JACK backend playback not yet implemented');
-  }
-
-  async stop() {
-    this.initialized = false;
-  }
-
-  async cleanup() {
-    this.initialized = false;
-  }
-
-  static async isAvailable() {
-    // Detection is handled in NativeMode via jack_lsp/jackd presence
-    return false;
+  static async isAvailable(binary = 'jack_play') {
+    return SpawnBackend.isAvailable(binary);
   }
 }

@@ -34,6 +34,8 @@ export class NativeMode extends BaseMode {
     this.evaluator = null;
     this.isPlaying = false;
     this.currentPattern = null;
+    this._cycleTimer = null;
+    this._cycle = 0;
   }
 
   /**
@@ -129,6 +131,7 @@ export class NativeMode extends BaseMode {
         await this.audioBackend.stop();
       }
 
+      this._stopCycleCounter();
       this.isPlaying = false;
       this.currentPattern = null;
       this.logger.info('Playback stopped');
@@ -178,6 +181,8 @@ export class NativeMode extends BaseMode {
     this.backend = null;
     this.isPlaying = false;
     this.currentPattern = null;
+    this._cycle = 0;
+    this._stopCycleCounter();
   }
 
   /**
@@ -195,6 +200,8 @@ export class NativeMode extends BaseMode {
       sampleRate: this.audioContext?.sampleRate || null,
       latencyMs: this.config.get('audio.latency') || null,
       bpm: this.config.get('audio.bpm') || 120,
+      cycle: this._cycle,
+      cpu: 0,
       currentPattern: this.currentPattern ? this.currentPattern.substring(0, 50) + '...' : null
     };
   }
@@ -341,6 +348,7 @@ export class NativeMode extends BaseMode {
     return new PatternEvaluator(this.audioContext, this.logger, {}, 5000, async (pattern) => {
       // TODO: Hook pattern into audio scheduling engine
       this.logger.debug(`Pattern received (type=${pattern?.constructor?.name || typeof pattern})`);
+      this._startCycleCounter();
     });
   }
 
@@ -362,5 +370,21 @@ export class NativeMode extends BaseMode {
     // Phase 1 MVP: Basic syntax validation
     // Phase 2 will use full Strudel parser
     this.logger.debug(`Pattern validation: ${code.length} characters`);
+  }
+
+  _startCycleCounter() {
+    this._stopCycleCounter();
+    const bpm = this.config.get('audio.bpm') || 120;
+    const intervalMs = (60_000 / bpm) / 4; // quarter step
+    this._cycleTimer = setInterval(() => {
+      this._cycle += 0.25;
+    }, intervalMs);
+  }
+
+  _stopCycleCounter() {
+    if (this._cycleTimer) {
+      clearInterval(this._cycleTimer);
+      this._cycleTimer = null;
+    }
   }
 }
