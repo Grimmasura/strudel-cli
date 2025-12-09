@@ -13,7 +13,7 @@ Strudel CLI is a high-performance, hybrid command-line interface for [Strudel](h
 ### Key Features
 
 - **🎯 Performance-Optimized**: 75-83% latency reduction compared to web (5-10ms vs 20-50ms)
-- **🔌 Multiple Audio Backends**: Native ALSA, JACK, PulseAudio, WebAudio fallback, SuperDirt/OSC
+- **🔌 Multiple Audio Backends**: PipeWire, ALSA, JACK, PulseAudio, WebAudio fallback, SuperDirt/OSC
 - **📴 Complete Offline Operation**: Local asset management, no CDN dependencies
 - **⚡ Low-Latency REPL**: Professional live coding experience in Kitty, Alacritty, tmux
 - **🎨 Hybrid Architecture**: Seamlessly switch between Web, Native, and OSC modes
@@ -88,7 +88,7 @@ Strudel CLI implements a **hybrid architecture** supporting multiple execution m
 
 | Mode | Backend | Latency | Use Case |
 |------|---------|---------|----------|
-| **Native** | ALSA/JACK/Pulse | 5-10ms | Live performance, production |
+| **Native** | PipeWire/ALSA/JACK/Pulse | 5-10ms | Live performance, production |
 | **Web** | Puppeteer (WebAudio) | 20-50ms | Compatibility fallback |
 | **OSC** | SuperDirt/SuperCollider | 10-15ms | Complex synthesis |
 
@@ -160,9 +160,10 @@ Preliminary testing on Arch Linux (AMD Ryzen 7, 16GB RAM):
 
 - Node.js 20.0.0+
 - For native audio:
+  - PipeWire utilities (preferred): `sudo pacman -S pipewire pipewire-alsa pipewire-pulse`
   - ALSA development headers: `sudo pacman -S alsa-lib`
   - JACK (optional): `sudo pacman -S jack2`
-  - PulseAudio (optional): `sudo pacman -S pulseaudio`
+  - PulseAudio (optional fallback): `sudo pacman -S pulseaudio`
 
 ### Development Setup
 
@@ -210,10 +211,13 @@ strudel-cli/
 
 - ✅ CLI framework and configuration
 - ✅ Project structure scaffolding
-- ⏳ Web mode (Puppeteer) - *In Progress*
-- ⏳ Native ALSA backend - *In Progress*
-- ⏳ Terminal REPL - *In Progress*
-- ⏳ Sample server - *Planned*
+- ✅ Native PipeWire backend (MVP)
+- ✅ Sandbox pattern evaluator (vm2)
+- ✅ Terminal REPL with completion/visualizer scaffold
+- ✅ Sample cache with hashes and manifest (offline-ready)
+- ⏳ Web mode (Puppeteer) – fallback/stub in tests
+- ⏳ Sample downloader (packs) – streaming + checksum; archive extraction pending
+- ⏳ Sample server
 
 ### Phase 2: Audio Backends (Q1 2026)
 
