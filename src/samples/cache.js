@@ -388,6 +388,18 @@ export class SampleCache {
         const hash = this._hashBuffer(data);
         const ok = packMeta.hash ? hash === packMeta.hash : true;
         results.push({ path: packPath, url, ok });
+        if (ok && packMeta.files) {
+          for (const [fileRel, expectedHash] of Object.entries(packMeta.files)) {
+            try {
+              const fileAbs = path.join(this.cacheDir, fileRel);
+              const fileData = await fs.readFile(fileAbs);
+              const fileHash = this._hashBuffer(fileData);
+              results.push({ path: fileRel, url, ok: fileHash === expectedHash });
+            } catch (error) {
+              results.push({ path: fileRel, url, ok: false, error: error.message });
+            }
+          }
+        }
       } catch (error) {
         results.push({ path: packPath, url, ok: false, error: error.message });
       }

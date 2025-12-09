@@ -209,14 +209,13 @@ strudel-cli/
 
 ### Phase 1: Core Implementation (Current)
 
-- ✅ CLI framework and configuration
-- ✅ Project structure scaffolding
-- ✅ Native PipeWire backend (MVP)
-- ✅ Sandbox pattern evaluator (vm2)
-- ✅ Terminal REPL with completion/visualizer scaffold
-- ✅ Sample cache with hashes and manifest (offline-ready)
+- ✅ CLI framework/configuration + orchestrator wired for play/repl/samples
+- ✅ Native scheduler + PipeWire/ALSA/Pulse/JACK spawn backends
+- ✅ Sandbox pattern evaluator (vm2 + @strudel/transpiler) feeding audio engine
+- ✅ Terminal REPL with completion/visualizer + hush/bpm/status/metrics
+- ✅ Sample cache with hashes/manifest and verify/clear/stats commands
+- ✅ Sample downloader with resume, checksum verification, and archive extraction
 - ⏳ Web mode (Puppeteer) – fallback/stub in tests
-- ⏳ Sample downloader (packs) – streaming + checksum; archive extraction pending
 - ⏳ Sample server
 
 ### Phase 2: Audio Backends (Q1 2026)

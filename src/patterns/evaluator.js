@@ -37,12 +37,14 @@ export class PatternEvaluator {
    * @param {object} scopeOverrides - Additional scope bindings
    * @param {number} timeoutMs - Execution timeout in ms
    * @param {Function} onPattern - Callback when a pattern is produced
+   * @param {object} audioEngine - Optional audio engine for scheduling
    */
-  constructor(audioContext, logger, scopeOverrides = {}, timeoutMs = 5000, onPattern = null) {
+  constructor(audioContext, logger, scopeOverrides = {}, timeoutMs = 5000, onPattern = null, audioEngine = null) {
     this.audioContext = audioContext;
     this.logger = logger;
     this.timeoutMs = timeoutMs;
     this.onPattern = onPattern;
+    this.audioEngine = audioEngine;
     this.scope = this._buildScope(scopeOverrides);
     this.vm = new VM({
       timeout: this.timeoutMs,
@@ -75,12 +77,18 @@ export class PatternEvaluator {
     }
 
     try {
-    const transpiled = transpiler(trimmed, { addReturn: true, wrapAsync: false });
-    const wrapped = `(async () => { ${transpiled.output} })()`;
-    const pattern = await this.vm.run(wrapped);
+      const transpiled = transpiler(trimmed, { addReturn: true, wrapAsync: false });
+      const wrapped = `(async () => { ${transpiled.output} })()`;
+      const pattern = await this.vm.run(wrapped);
+      if (!strudel.isPattern(pattern)) {
+        throw new Error('Evaluation did not return a Strudel Pattern');
+      }
       this.logger?.debug?.('Pattern evaluated in sandbox');
       if (this.onPattern) {
         await this.onPattern(pattern);
+      }
+      if (this.audioEngine && pattern) {
+        await this.audioEngine.setPattern(pattern);
       }
       return pattern;
     } catch (error) {
@@ -93,7 +101,9 @@ export class PatternEvaluator {
    * Stop current execution (no-op placeholder for streaming schedulers).
    */
   async stop() {
-    // Placeholder for future scheduling control
+    if (this.audioEngine) {
+      await this.audioEngine.stop();
+    }
   }
 
   /**
@@ -101,6 +111,7 @@ export class PatternEvaluator {
    */
   async cleanup() {
     // No external resources to clean for vm2
+    this.audioEngine = null;
   }
 
   _buildScope(overrides) {

@@ -16,6 +16,7 @@ import { PipeWireBackend } from '../audio/backends/pipewire.js';
 import { AlsaBackend } from '../audio/backends/alsa.js';
 import { PulseAudioBackend } from '../audio/backends/pulse.js';
 import { JackBackend } from '../audio/backends/jack.js';
+import { NativeAudioEngine } from '../audio/engine.js';
 import { PatternEvaluator } from '../patterns/evaluator.js';
 
 const execAsync = promisify(exec);
@@ -31,11 +32,10 @@ export class NativeMode extends BaseMode {
     this.audioContext = null;
     this.backend = null;
     this.audioBackend = null;
+    this.audioEngine = null;
     this.evaluator = null;
     this.isPlaying = false;
     this.currentPattern = null;
-    this._cycleTimer = null;
-    this._cycle = 0;
   }
 
   /**
@@ -61,6 +61,12 @@ export class NativeMode extends BaseMode {
       if (this.audioBackend?.initialize) {
         await this.audioBackend.initialize();
       }
+
+      this.audioEngine = new NativeAudioEngine({
+        backend: this.audioBackend,
+        config: this.config,
+        logger: this.logger
+      });
 
       // Phase 1 MVP: Pattern evaluator stub (full implementation in Phase 2)
       this.evaluator = this._createPatternEvaluator();
@@ -90,7 +96,6 @@ export class NativeMode extends BaseMode {
 
     this.logger.info('Playing pattern in Native mode');
     this.logger.debug(`Pattern code: ${code.substring(0, 100)}...`);
-    this.logger.warn('Phase 1 MVP: Pattern evaluation is stubbed (full implementation in Phase 2)');
 
     try {
       // Store current pattern
@@ -127,11 +132,14 @@ export class NativeMode extends BaseMode {
         await this.evaluator.stop();
       }
 
+      if (this.audioEngine) {
+        await this.audioEngine.stop();
+      }
+
       if (this.audioBackend) {
         await this.audioBackend.stop();
       }
 
-      this._stopCycleCounter();
       this.isPlaying = false;
       this.currentPattern = null;
       this.logger.info('Playback stopped');
@@ -178,11 +186,18 @@ export class NativeMode extends BaseMode {
       this.audioBackend = null;
     }
 
+    if (this.audioEngine) {
+      try {
+        await this.audioEngine.cleanup();
+      } catch (error) {
+        this.logger.warn(`Error cleaning audio engine: ${error.message}`);
+      }
+      this.audioEngine = null;
+    }
+
     this.backend = null;
     this.isPlaying = false;
     this.currentPattern = null;
-    this._cycle = 0;
-    this._stopCycleCounter();
   }
 
   /**
@@ -198,10 +213,11 @@ export class NativeMode extends BaseMode {
       audioBackendActive: this.audioBackend !== null,
       evaluatorActive: this.evaluator !== null,
       sampleRate: this.audioContext?.sampleRate || null,
-      latencyMs: this.config.get('audio.latency') || null,
-      bpm: this.config.get('audio.bpm') || 120,
-      cycle: this._cycle,
-      cpu: 0,
+      latencyMs: this.audioEngine?.getMetrics().latencyMs || this.config.get('audio.latency') || null,
+      bpm: this.audioEngine?.getMetrics().bpm || this.config.get('audio.bpm') || 120,
+      cycle: this.audioEngine?.getMetrics().cycle || 0,
+      cpu: this.audioEngine?.getMetrics().cpuAvg || 0,
+      metrics: this.audioEngine?.getMetrics() || null,
       currentPattern: this.currentPattern ? this.currentPattern.substring(0, 50) + '...' : null
     };
   }
@@ -345,11 +361,16 @@ export class NativeMode extends BaseMode {
    */
   _createPatternEvaluator() {
     this.logger.debug('Creating pattern evaluator (vm2 sandbox)');
-    return new PatternEvaluator(this.audioContext, this.logger, {}, 5000, async (pattern) => {
-      // TODO: Hook pattern into audio scheduling engine
-      this.logger.debug(`Pattern received (type=${pattern?.constructor?.name || typeof pattern})`);
-      this._startCycleCounter();
-    });
+    return new PatternEvaluator(
+      this.audioContext,
+      this.logger,
+      {},
+      5000,
+      async (pattern) => {
+        this.logger.debug(`Pattern received (type=${pattern?.constructor?.name || typeof pattern})`);
+      },
+      this.audioEngine
+    );
   }
 
   /**
@@ -372,19 +393,4 @@ export class NativeMode extends BaseMode {
     this.logger.debug(`Pattern validation: ${code.length} characters`);
   }
 
-  _startCycleCounter() {
-    this._stopCycleCounter();
-    const bpm = this.config.get('audio.bpm') || 120;
-    const intervalMs = (60_000 / bpm) / 4; // quarter step
-    this._cycleTimer = setInterval(() => {
-      this._cycle += 0.25;
-    }, intervalMs);
-  }
-
-  _stopCycleCounter() {
-    if (this._cycleTimer) {
-      clearInterval(this._cycleTimer);
-      this._cycleTimer = null;
-    }
-  }
 }

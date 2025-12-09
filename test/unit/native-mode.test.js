@@ -10,6 +10,7 @@ import { PipeWireBackend } from '../../src/audio/backends/pipewire.js';
 import { AlsaBackend } from '../../src/audio/backends/alsa.js';
 import { PulseAudioBackend } from '../../src/audio/backends/pulse.js';
 import { JackBackend } from '../../src/audio/backends/jack.js';
+import { NativeAudioEngine } from '../../src/audio/engine.js';
 import * as strudel from '@strudel/core';
 
 describe('NativeMode', () => {
@@ -29,15 +30,22 @@ describe('NativeMode', () => {
     vi.spyOn(PipeWireBackend.prototype, 'stop').mockResolvedValue();
     vi.spyOn(PipeWireBackend.prototype, 'cleanup').mockResolvedValue();
     vi.spyOn(PipeWireBackend.prototype, 'playSineWave').mockResolvedValue();
+    vi.spyOn(PipeWireBackend.prototype, 'playBuffer').mockResolvedValue();
     vi.spyOn(AlsaBackend.prototype, 'initialize').mockResolvedValue();
     vi.spyOn(AlsaBackend.prototype, 'stop').mockResolvedValue();
     vi.spyOn(AlsaBackend.prototype, 'cleanup').mockResolvedValue();
+    vi.spyOn(AlsaBackend.prototype, 'playBuffer').mockResolvedValue();
     vi.spyOn(PulseAudioBackend.prototype, 'initialize').mockResolvedValue();
     vi.spyOn(PulseAudioBackend.prototype, 'stop').mockResolvedValue();
     vi.spyOn(PulseAudioBackend.prototype, 'cleanup').mockResolvedValue();
+    vi.spyOn(PulseAudioBackend.prototype, 'playBuffer').mockResolvedValue();
     vi.spyOn(JackBackend.prototype, 'initialize').mockResolvedValue();
     vi.spyOn(JackBackend.prototype, 'stop').mockResolvedValue();
     vi.spyOn(JackBackend.prototype, 'cleanup').mockResolvedValue();
+    vi.spyOn(JackBackend.prototype, 'playBuffer').mockResolvedValue();
+    vi.spyOn(NativeAudioEngine.prototype, 'setPattern').mockResolvedValue();
+    vi.spyOn(NativeAudioEngine.prototype, 'stop').mockResolvedValue();
+    vi.spyOn(NativeAudioEngine.prototype, 'cleanup').mockResolvedValue();
   });
 
   afterEach(async () => {
