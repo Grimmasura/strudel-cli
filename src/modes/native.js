@@ -13,6 +13,9 @@ import { BaseMode } from './base.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { PipeWireBackend } from '../audio/backends/pipewire.js';
+import { AlsaBackend } from '../audio/backends/alsa.js';
+import { PulseAudioBackend } from '../audio/backends/pulse.js';
+import { JackBackend } from '../audio/backends/jack.js';
 import { PatternEvaluator } from '../patterns/evaluator.js';
 
 const execAsync = promisify(exec);
@@ -51,9 +54,9 @@ export class NativeMode extends BaseMode {
       // Phase 1 MVP: Create minimal audio context foundation
       this.audioContext = this._createMinimalAudioContext();
 
-      // Initialize backend driver if PipeWire selected
-      if (this.backend === 'pipewire') {
-        this.audioBackend = new PipeWireBackend(this.config, this.logger);
+      // Initialize backend driver
+      this.audioBackend = this._createAudioBackend(this.backend);
+      if (this.audioBackend?.initialize) {
         await this.audioBackend.initialize();
       }
 
@@ -190,8 +193,31 @@ export class NativeMode extends BaseMode {
       audioBackendActive: this.audioBackend !== null,
       evaluatorActive: this.evaluator !== null,
       sampleRate: this.audioContext?.sampleRate || null,
+      latencyMs: this.config.get('audio.latency') || null,
+      bpm: this.config.get('audio.bpm') || 120,
       currentPattern: this.currentPattern ? this.currentPattern.substring(0, 50) + '...' : null
     };
+  }
+
+  /**
+   * Create backend instance by name
+   * @param {string} backendName
+   * @returns {object|null}
+   * @private
+   */
+  _createAudioBackend(backendName) {
+    switch (backendName) {
+      case 'pipewire':
+        return new PipeWireBackend(this.config, this.logger);
+      case 'alsa':
+        return new AlsaBackend(this.config, this.logger);
+      case 'pulse':
+        return new PulseAudioBackend(this.config, this.logger);
+      case 'jack':
+        return new JackBackend(this.config, this.logger);
+      default:
+        return null;
+    }
   }
 
   /**
@@ -242,10 +268,7 @@ export class NativeMode extends BaseMode {
           return PipeWireBackend.isAvailable();
 
         case 'alsa':
-          // Check for ALSA utilities
-          await execAsync('which aplay');
-          this.logger.debug('ALSA backend available');
-          return true;
+          return AlsaBackend.isAvailable();
 
         case 'jack':
           // Check for JACK daemon or utilities
@@ -265,10 +288,7 @@ export class NativeMode extends BaseMode {
           }
 
         case 'pulse':
-          // Check for PulseAudio utilities
-          await execAsync('which pactl');
-          this.logger.debug('PulseAudio backend available');
-          return true;
+          return PulseAudioBackend.isAvailable();
 
         default:
           this.logger.warn(`Unknown backend: ${backend}`);
@@ -290,6 +310,7 @@ export class NativeMode extends BaseMode {
     const sampleRate = this.config.get('audio.sampleRate') || 48000;
     const bufferSize = this.config.get('audio.bufferSize') || 256;
     const channels = this.config.get('audio.channels') || 2;
+    const latency = this.config.get('audio.latency') || 10;
 
     this.logger.debug(`Creating audio context: ${sampleRate}Hz, ${bufferSize} samples, ${channels} channels`);
 
@@ -299,6 +320,7 @@ export class NativeMode extends BaseMode {
       sampleRate,
       bufferSize,
       channels,
+      latency,
       currentTime: 0,
       state: 'running',
       // Stub methods for Phase 2
@@ -316,7 +338,10 @@ export class NativeMode extends BaseMode {
    */
   _createPatternEvaluator() {
     this.logger.debug('Creating pattern evaluator (vm2 sandbox)');
-    return new PatternEvaluator(this.audioContext, this.logger);
+    return new PatternEvaluator(this.audioContext, this.logger, {}, 5000, async (pattern) => {
+      // TODO: Hook pattern into audio scheduling engine
+      this.logger.debug(`Pattern received (type=${pattern?.constructor?.name || typeof pattern})`);
+    });
   }
 
   /**

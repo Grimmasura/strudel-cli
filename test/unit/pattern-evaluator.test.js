@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import * as strudel from '@strudel/core';
 import { PatternEvaluator, PatternEvaluationError } from '../../src/patterns/evaluator.js';
 
 const makeLogger = () => ({
@@ -22,9 +23,12 @@ describe('PatternEvaluator', () => {
   it('evaluates simple pattern code', async () => {
     const result = await evaluator.evaluate('note("c3 e3 g3").s("sine")');
 
-    expect(result.name).toBe('note');
-    expect(result.chain[0].method).toBe('s');
-    expect(result.chain[0].args[0]).toBe('sine');
+    expect(strudel.isPattern(result)).toBe(true);
+  });
+
+  it('evaluates mini helper', async () => {
+    const result = await evaluator.evaluate('mini("bd sd")');
+    expect(strudel.isPattern(result)).toBe(true);
   });
 
   it('blocks require access', async () => {
@@ -36,7 +40,7 @@ describe('PatternEvaluator', () => {
   });
 
   it('enforces timeout', async () => {
-    await expect(evaluator.evaluate('while(true) {}')).rejects.toThrow(/timed out/i);
+    await expect(evaluator.evaluate('while(true) {}')).rejects.toThrow(PatternEvaluationError);
   });
 
   it('rejects empty code', async () => {

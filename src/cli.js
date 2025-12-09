@@ -11,6 +11,9 @@
 import { program } from 'commander';
 import chalk from 'chalk';
 import { VERSION } from './index.js';
+import { Config } from './core/config.js';
+import { Logger } from './core/logger.js';
+import { SampleCache } from './samples/cache.js';
 
 /**
  * Main CLI function
@@ -118,12 +121,47 @@ export async function cli(argv) {
   program
     .command('samples')
     .description('Manage sample libraries')
-    .argument('[action]', 'Action: list|download|update')
-    .action(async (action, options) => {
-      console.log(chalk.blue('📦 Strudel CLI - Sample Management'));
-      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+    .argument('[action]', 'Action: list|verify|clear|stats')
+    .action(async (action) => {
+      const config = new Config();
+      const logger = new Logger();
+      const cache = new SampleCache(config, logger);
+      await cache.initialize();
 
-      // TODO: Implement sample management
+      switch (action) {
+        case 'verify': {
+          console.log(chalk.blue('🔍 Verifying sample cache...'));
+          const results = await cache.verifyAll();
+          const failures = results.filter((r) => !r.ok);
+          results.forEach((r) => {
+            const target = r.url ? `${r.url} (${r.path})` : r.path;
+            if (r.ok) console.log(chalk.green(`✓ ${target}`));
+            else console.log(chalk.red(`✗ ${target}: ${r.error || 'hash mismatch'}`));
+          });
+          console.log(chalk.gray(`Total: ${results.length}, Failures: ${failures.length}`));
+          break;
+        }
+        case 'clear': {
+          console.log(chalk.blue('🗑️ Clearing sample cache...'));
+          await cache.clear();
+          break;
+        }
+        case 'stats': {
+          const stats = await cache.getStats();
+          console.log(chalk.blue('📊 Sample cache stats'));
+          console.log(`Samples: ${stats.totalSamples}`);
+          console.log(`Size: ${stats.totalSizeMB} MB (${stats.usagePercent}% of ${stats.maxSizeMB} MB)`);
+          console.log(`Dir: ${stats.cacheDir}`);
+          break;
+        }
+        case 'list':
+        default: {
+          const stats = await cache.getStats();
+          console.log(chalk.blue('📦 Sample cache'));
+          console.log(`Samples: ${stats.totalSamples}`);
+          console.log(`Size: ${stats.totalSizeMB} MB`);
+        }
+      }
     });
 
   // Command: doctor

@@ -429,7 +429,7 @@ describe('SampleDownloader', () => {
         await fs.writeFile(dest, data);
       });
 
-      const savedPath = await downloader.downloadPack(url, { expectedHash });
+      const savedPath = await downloader.downloadPack(url, { expectedHash, extract: false });
       const savedData = await fs.readFile(savedPath);
       expect(savedData.toString()).toBe('pack-data');
       expect(downloader.cache.manifest.urls[url]).toContain('pack.zip');

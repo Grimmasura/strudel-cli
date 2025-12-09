@@ -35,6 +35,7 @@ export class REPL {
     this.multilineBuffer = [];
     this.inMultilineMode = false;
     this.visualizer = new TerminalVisualizer({ enabled: this.options.visualize, logger: orchestrator.logger });
+    this.cycleCounter = 0;
     this.strudelCompletions = this.options.completions || [
       'note',
       'sound',
@@ -55,9 +56,11 @@ export class REPL {
       '.exit': this._exit.bind(this),
       '.quit': this._exit.bind(this),
       '.stop': this._stop.bind(this),
+      '.hush': this._hush.bind(this),
       '.play': this._playLastPattern.bind(this),
       '.mode': this._switchMode.bind(this),
       '.status': this._showStatus.bind(this),
+      '.bpm': this._bpm.bind(this),
       '.clear': this._clearScreen.bind(this),
       '.history': this._showHistory.bind(this)
     };
@@ -227,10 +230,11 @@ export class REPL {
     console.log(chalk.bold('\nStrudel CLI REPL Commands:\n'));
     console.log(chalk.cyan('  .help') + '              Show this help message');
     console.log(chalk.cyan('  .exit, .quit') + '       Exit the REPL');
-    console.log(chalk.cyan('  .stop') + '              Stop current pattern playback');
+    console.log(chalk.cyan('  .stop, .hush') + '       Stop current pattern playback');
     console.log(chalk.cyan('  .play') + '              Replay last pattern');
     console.log(chalk.cyan('  .mode <mode>') + '       Switch execution mode (web|native|osc)');
     console.log(chalk.cyan('  .status') + '            Show current status');
+    console.log(chalk.cyan('  .bpm [value]') + '       Show or set BPM');
     console.log(chalk.cyan('  .clear') + '             Clear screen');
     console.log(chalk.cyan('  .history') + '           Show command history');
     console.log();
@@ -262,6 +266,15 @@ export class REPL {
     } catch (error) {
       console.log(chalk.red(`✗ Error stopping: ${error.message}`));
     }
+  }
+
+  /**
+   * Hush/stop all playback
+   * @private
+   */
+  async _hush() {
+    await this._stop();
+    this.currentPattern = null;
   }
 
   /**
@@ -322,18 +335,27 @@ export class REPL {
       if (modeState.sampleRate) {
         console.log(chalk.cyan('  Sample Rate:') + `       ${modeState.sampleRate}Hz`);
       }
+      if (modeState.bpm) {
+        console.log(chalk.cyan('  BPM:') + `              ${modeState.bpm}`);
+      }
+      if (modeState.latencyMs !== undefined) {
+        console.log(chalk.cyan('  Latency:') + `          ${modeState.latencyMs}ms`);
+      }
+      if (modeState.cpu !== undefined) {
+        console.log(chalk.cyan('  CPU:') + `              ${modeState.cpu || 0}%`);
+      }
       if (modeState.browserActive !== undefined) {
         console.log(chalk.cyan('  Browser:') + `           ${modeState.browserActive ? 'active' : 'inactive'}`);
       }
     }
 
     if (this.currentPattern) {
-      console.log(chalk.cyan('  Last Pattern:') + `      ${this.currentPattern.substring(0, 40)}...`);
-    }
-
-    console.log(chalk.cyan('  History:') + `           ${this.commandHistory.length} commands`);
-    console.log();
+    console.log(chalk.cyan('  Last Pattern:') + `      ${this.currentPattern.substring(0, 40)}...`);
   }
+
+  console.log(chalk.cyan('  History:') + `           ${this.commandHistory.length} commands`);
+  console.log();
+}
 
   /**
    * Clear screen
@@ -363,6 +385,26 @@ export class REPL {
       console.log(chalk.gray(`  ${displayIndex}.`) + ` ${cmd.substring(0, 60)}${cmd.length > 60 ? '...' : ''}`);
     });
     console.log();
+  }
+
+  /**
+   * Show or set BPM (stored in config)
+   * @param {Array<string>} args
+   * @private
+   */
+  async _bpm(args = []) {
+    if (args.length === 0) {
+      const currentBpm = this.orchestrator.config.get('audio.bpm') || 120;
+      console.log(chalk.gray(`Current BPM: ${currentBpm}`));
+      return;
+    }
+    const val = Number(args[0]);
+    if (Number.isNaN(val) || val <= 0) {
+      console.log(chalk.red('Invalid BPM value'));
+      return;
+    }
+    this.orchestrator.config.set('audio.bpm', val);
+    console.log(chalk.green(`✓ BPM set to ${val}`));
   }
 
   /**
@@ -414,12 +456,17 @@ export class REPL {
     const latency = state.latencyMs || this.orchestrator.config?.get?.('audio.latency') || null;
     this.visualizer.render({
       pattern,
-      cycle: state.cycle || 0,
+      cycle: state.cycle || this._nextCycle(),
       bpm: state.bpm || 120,
       cpu: state.cpu || 0,
       latencyMs: latency,
       playing: state.isPlaying || false
     });
+  }
+
+  _nextCycle() {
+    this.cycleCounter += 0.25;
+    return this.cycleCounter;
   }
 
   /**

@@ -34,7 +34,8 @@ export class Config {
         backend: process.env.STRUDEL_AUDIO_BACKEND || 'auto',
         sampleRate: 48000,
         bufferSize: 256,
-        latency: 10
+        latency: 10,
+        bpm: 120
       },
       samples: {
         localPath: process.env.STRUDEL_SAMPLES_DIR || '~/.strudel/samples',
