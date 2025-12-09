@@ -41,7 +41,8 @@ export class TerminalVisualizer {
       bpm = 120,
       cpu = 0,
       latencyMs = null,
-      playing = false
+      playing = false,
+      events = 0
     } = state;
 
     const bar = this._renderBar(cycle);
@@ -57,7 +58,9 @@ export class TerminalVisualizer {
         chalk.bold.cyan('│'),
       chalk.bold.cyan('│ ') +
         chalk.gray(
-          `BPM: ${bpm} | CPU: ${cpu}% | Latency: ${latencyMs ?? '-'}ms | ${playing ? '▶' : '■'}`
+          `BPM: ${bpm} | CPU: ${cpu}% | Latency: ${latencyMs ?? '-'}ms | Evts: ${events} | ${
+            playing ? '▶' : '■'
+          }`
         ).padEnd(33, ' ') +
         chalk.bold.cyan('│'),
       chalk.bold.cyan('╰─────────────────────────────────────╯')

@@ -60,6 +60,7 @@ export class REPL {
       '.play': this._playLastPattern.bind(this),
       '.mode': this._switchMode.bind(this),
       '.status': this._showStatus.bind(this),
+      '.metrics': this._showMetrics.bind(this),
       '.bpm': this._bpm.bind(this),
       '.clear': this._clearScreen.bind(this),
       '.history': this._showHistory.bind(this)
@@ -234,6 +235,7 @@ export class REPL {
     console.log(chalk.cyan('  .play') + '              Replay last pattern');
     console.log(chalk.cyan('  .mode <mode>') + '       Switch execution mode (web|native|osc)');
     console.log(chalk.cyan('  .status') + '            Show current status');
+    console.log(chalk.cyan('  .metrics') + '           Show live audio metrics');
     console.log(chalk.cyan('  .bpm [value]') + '       Show or set BPM');
     console.log(chalk.cyan('  .clear') + '             Clear screen');
     console.log(chalk.cyan('  .history') + '           Show command history');
@@ -344,18 +346,41 @@ export class REPL {
       if (modeState.cpu !== undefined) {
         console.log(chalk.cyan('  CPU:') + `              ${modeState.cpu || 0}%`);
       }
+      if (modeState.metrics?.events !== undefined) {
+        console.log(chalk.cyan('  Events:') + `           ${modeState.metrics.events}`);
+      }
       if (modeState.browserActive !== undefined) {
         console.log(chalk.cyan('  Browser:') + `           ${modeState.browserActive ? 'active' : 'inactive'}`);
       }
     }
 
     if (this.currentPattern) {
-    console.log(chalk.cyan('  Last Pattern:') + `      ${this.currentPattern.substring(0, 40)}...`);
+      console.log(chalk.cyan('  Last Pattern:') + `      ${this.currentPattern.substring(0, 40)}...`);
+    }
+
+    console.log(chalk.cyan('  History:') + `           ${this.commandHistory.length} commands`);
+    console.log();
   }
 
-  console.log(chalk.cyan('  History:') + `           ${this.commandHistory.length} commands`);
-  console.log();
-}
+  /**
+   * Show streaming metrics from the current mode.
+   * @private
+   */
+  async _showMetrics() {
+    const metrics = this.orchestrator.currentMode?.getState?.().metrics;
+    if (!metrics) {
+      console.log(chalk.yellow('No metrics available (mode not started yet)'));
+      return;
+    }
+
+    console.log(chalk.bold('\nAudio Metrics:\n'));
+    console.log(chalk.cyan('  BPM:') + `              ${metrics.bpm}`);
+    console.log(chalk.cyan('  Cycle:') + `            ${metrics.cycle.toFixed(2)}`);
+    console.log(chalk.cyan('  Latency:') + `          ${metrics.latencyMs} ms`);
+    console.log(chalk.cyan('  CPU (approx):') + `     ${metrics.cpuAvg}%`);
+    console.log(chalk.cyan('  Events:') + `           ${metrics.events}`);
+    console.log();
+  }
 
   /**
    * Clear screen
@@ -454,12 +479,14 @@ export class REPL {
     }
     const state = this.orchestrator.currentMode?.getState?.() || {};
     const latency = state.latencyMs || this.orchestrator.config?.get?.('audio.latency') || null;
+    const metrics = state.metrics || {};
     this.visualizer.render({
       pattern,
-      cycle: state.cycle || this._nextCycle(),
-      bpm: state.bpm || 120,
-      cpu: state.cpu || 0,
-      latencyMs: latency,
+      cycle: metrics.cycle || state.cycle || this._nextCycle(),
+      bpm: metrics.bpm || state.bpm || 120,
+      cpu: metrics.cpuAvg || state.cpu || 0,
+      latencyMs: metrics.latencyMs || latency,
+      events: metrics.events || 0,
       playing: state.isPlaying || false
     });
   }

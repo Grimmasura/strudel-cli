@@ -50,15 +50,13 @@ export class SampleDownloader {
     const targetPath = path.join(destDir, path.basename(url));
     const absPath = path.join(this.cache.cacheDir, targetPath);
 
-    await this._streamToFile(url, absPath, options.progress);
-
-    // Verify checksum if provided
-    const data = await fs.readFile(absPath);
-    const hash = this._hashBuffer(data);
-    if (options.expectedHash && options.expectedHash !== hash) {
-      await fs.unlink(absPath).catch(() => {});
-      throw new Error('Downloaded pack failed checksum verification');
-    }
+    const streamResult = await this._streamToFile(url, absPath, {
+      onProgress: options.progress,
+      expectedHash: options.expectedHash
+    });
+    const hash =
+      streamResult?.hash ||
+      this._hashBuffer(await fs.readFile(absPath));
 
     // Update manifest entry for pack
     const now = new Date().toISOString();
@@ -77,7 +75,9 @@ export class SampleDownloader {
         path.join(path.dirname(targetPath), path.parse(targetPath).name)
       );
       await this._extractArchive(absPath, extractTarget);
+      const fileHashes = await this._hashExtractedFiles(extractTarget);
       this.cache.manifest.packs[url].extractedTo = extractTarget;
+      this.cache.manifest.packs[url].files = fileHashes;
       await this.cache._saveManifest();
     }
 
@@ -130,6 +130,11 @@ export class SampleDownloader {
 
       // Read downloaded file
       const data = await fs.readFile(tempPath);
+      const hash = this._hashBuffer(data);
+      if (options.expectedHash && hash !== options.expectedHash) {
+        await fs.unlink(tempPath).catch(() => {});
+        throw new Error('Sample failed checksum verification');
+      }
 
       // Add to cache
       const cachedPath = await this.cache.addSample(destination, data);
@@ -231,41 +236,81 @@ export class SampleDownloader {
    * Stream a remote file to disk with optional progress callback.
    * @private
    */
-  async _streamToFile(url, destPath, onProgress) {
+  async _streamToFile(url, destPath, { onProgress, expectedHash, resume = true } = {}) {
     const protocol = url.startsWith('https') ? https : http;
     const dir = path.dirname(destPath);
     await fs.mkdir(dir, { recursive: true });
 
-    await new Promise((resolve, reject) => {
-      const fileStream = createWriteStream(destPath);
-      protocol.get(url, (response) => {
-        if (response.statusCode !== 200) {
-          reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
-          return;
-        }
-        const total = Number(response.headers['content-length'] || 0);
-        let downloaded = 0;
-        response.on('data', (chunk) => {
-          downloaded += chunk.length;
-          if (typeof onProgress === 'function' && total > 0) {
-            onProgress({ downloaded, total, percent: (downloaded / total) * 100 });
-          }
-        });
+    // Support resumable downloads by appending if partial file exists
+    let start = 0;
+    try {
+      const stat = await fs.stat(destPath);
+      start = resume ? stat.size : 0;
+    } catch {
+      start = 0;
+    }
 
-        response.pipe(fileStream);
-        fileStream.on('finish', () => {
-          fileStream.close();
-          resolve();
-        });
-        fileStream.on('error', (err) => {
+    const hash = crypto.createHash('sha256');
+    if (start > 0) {
+      // Seed hash with existing bytes to verify resumed content
+      const existing = await fs.readFile(destPath);
+      hash.update(existing);
+    }
+
+    await new Promise((resolve, reject) => {
+      const fileStream = createWriteStream(destPath, { flags: start > 0 ? 'a' : 'w' });
+      const requestOptions = start > 0 ? { headers: { Range: `bytes=${start}-` } } : {};
+
+      protocol
+        .get(url, requestOptions, (response) => {
+          // Handle servers that don't honour range: restart from scratch
+          if (response.statusCode === 200 && start > 0) {
+            fileStream.close();
+            fs.writeFile(destPath, '').then(() => {
+              this._streamToFile(url, destPath, { onProgress, expectedHash, resume: false })
+                .then(resolve)
+                .catch(reject);
+            });
+            return;
+          }
+
+          if (![200, 206].includes(response.statusCode)) {
+            reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+            return;
+          }
+          const total = Number(response.headers['content-length'] || 0) + start;
+          let downloaded = start;
+          response.on('data', (chunk) => {
+            downloaded += chunk.length;
+            hash.update(chunk);
+            if (typeof onProgress === 'function' && total > 0) {
+              onProgress({ downloaded, total, percent: (downloaded / total) * 100 });
+            }
+          });
+
+          response.pipe(fileStream);
+          fileStream.on('finish', () => {
+            fileStream.close();
+            resolve();
+          });
+          fileStream.on('error', (err) => {
+            fs.unlink(destPath).catch(() => {});
+            reject(err);
+          });
+        })
+        .on('error', (err) => {
           fs.unlink(destPath).catch(() => {});
           reject(err);
         });
-      }).on('error', (err) => {
-        fs.unlink(destPath).catch(() => {});
-        reject(err);
-      });
     });
+
+    const digest = hash.digest('hex');
+    if (expectedHash && digest !== expectedHash) {
+      await fs.unlink(destPath).catch(() => {});
+      throw new Error(`Checksum mismatch: expected ${expectedHash}, got ${digest}`);
+    }
+
+    return { hash: digest };
   }
 
   /**
@@ -280,5 +325,21 @@ export class SampleDownloader {
 
   _hashBuffer(data) {
     return crypto.createHash('sha256').update(data).digest('hex');
+  }
+
+  async _hashExtractedFiles(dir) {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const result = {};
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        Object.assign(result, await this._hashExtractedFiles(full));
+      } else {
+        const data = await fs.readFile(full);
+        const rel = path.relative(this.cache.cacheDir, full);
+        result[rel] = this._hashBuffer(data);
+      }
+    }
+    return result;
   }
 }

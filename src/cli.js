@@ -14,6 +14,8 @@ import { VERSION } from './index.js';
 import { Config } from './core/config.js';
 import { Logger } from './core/logger.js';
 import { SampleCache } from './samples/cache.js';
+import { Orchestrator } from './core/orchestrator.js';
+import { SampleDownloader } from './samples/downloader.js';
 
 /**
  * Main CLI function
@@ -40,15 +42,29 @@ export async function cli(argv) {
     .option('--offline', 'Use only local assets')
     .option('--no-autoplay', 'Load without playing')
     .action(async (file, options) => {
-      console.log(chalk.blue('🎵 Strudel CLI - Play Mode'));
-      console.log(chalk.gray(`File: ${file}`));
-      console.log(chalk.gray(`Mode: ${options.mode}`));
-      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+      const globalOptions = program.opts();
+      const config = new Config();
+      const logger = new Logger({ verbose: globalOptions.verbose, quiet: globalOptions.quiet });
+      if (options.mode) config.set('mode', options.mode);
+      if (options.offline) config.set('offline', true);
+      if (options.samples) config.set('samples.localPath', options.samples);
 
-      // TODO: Import and use Orchestrator
-      // const { Orchestrator } = await import('./core/orchestrator.js');
-      // const orchestrator = new Orchestrator(config, logger);
-      // await orchestrator.play(file, options);
+      const orchestrator = new Orchestrator(config, logger);
+      try {
+        if (!options.autoplay) {
+          logger.info(`Loading pattern without autoplay from ${file}`);
+          await orchestrator.initialize({ mode: options.mode });
+          const fs = await import('fs/promises');
+          const code = await fs.readFile(file, 'utf-8');
+          await orchestrator.currentMode?.evaluator?.evaluate(code);
+        } else {
+          await orchestrator.play(file, options);
+        }
+        logger.info('Playback complete');
+      } catch (error) {
+        logger.error(`Play failed: ${error.message}`);
+        process.exitCode = 1;
+      }
     });
 
   // Command: repl
@@ -58,16 +74,24 @@ export async function cli(argv) {
     .option('-m, --mode <mode>', 'Audio backend mode', 'auto')
     .option('--theme <theme>', 'REPL theme (dark|light)', 'dark')
     .option('--no-banner', 'Hide startup banner')
+    .option('--visualize', 'Enable live visualization', true)
     .action(async (options) => {
-      console.log(chalk.blue('🎹 Strudel CLI - REPL Mode'));
-      console.log(chalk.gray(`Mode: ${options.mode}`));
-      console.log(chalk.gray(`Theme: ${options.theme}`));
-      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
-
-      // TODO: Import and use REPL
-      // const { REPL } = await import('./repl/terminal.js');
-      // const repl = new REPL(options);
-      // await repl.start();
+      const globalOptions = program.opts();
+      const config = new Config();
+      const logger = new Logger({ verbose: globalOptions.verbose, quiet: globalOptions.quiet });
+      config.set('mode', options.mode);
+      const orchestrator = new Orchestrator(config, logger);
+      try {
+        await orchestrator.startREPL({
+          ...options,
+          showBanner: options.banner !== false,
+          visualize: options.visualize !== false,
+          mode: options.mode
+        });
+      } catch (error) {
+        logger.error(`REPL failed: ${error.message}`);
+        process.exitCode = 1;
+      }
     });
 
   // Command: serve
@@ -121,11 +145,15 @@ export async function cli(argv) {
   program
     .command('samples')
     .description('Manage sample libraries')
-    .argument('[action]', 'Action: list|verify|clear|stats')
-    .action(async (action) => {
+    .argument('[action]', 'Action: list|verify|clear|stats|download')
+    .argument('[target]', 'URL or pack name for download/verify')
+    .option('--hash <sha256>', 'Expected SHA256 for downloads')
+    .option('--no-extract', 'Skip archive extraction')
+    .action(async (action, target, cmdOptions) => {
       const config = new Config();
       const logger = new Logger();
       const cache = new SampleCache(config, logger);
+      const downloader = new SampleDownloader(config, logger, cache);
       await cache.initialize();
 
       switch (action) {
@@ -152,6 +180,24 @@ export async function cli(argv) {
           console.log(`Samples: ${stats.totalSamples}`);
           console.log(`Size: ${stats.totalSizeMB} MB (${stats.usagePercent}% of ${stats.maxSizeMB} MB)`);
           console.log(`Dir: ${stats.cacheDir}`);
+          break;
+        }
+        case 'download': {
+          if (!target) {
+            console.log(chalk.red('Please provide a URL or pack name to download'));
+            break;
+          }
+          console.log(chalk.blue(`⬇️  Downloading: ${target}`));
+          try {
+            await downloader.downloadPack(target, {
+              expectedHash: cmdOptions.hash,
+              extract: cmdOptions.extract !== false
+            });
+            console.log(chalk.green('✓ Download complete'));
+          } catch (error) {
+            console.log(chalk.red(`✗ Download failed: ${error.message}`));
+            process.exitCode = 1;
+          }
           break;
         }
         case 'list':
