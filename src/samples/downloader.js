@@ -96,11 +96,12 @@ export class SampleDownloader {
 
     try {
       await this._ensureCacheInitialized();
+      const tempName = `.download-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       // Determine protocol
       const protocol = url.startsWith('https') ? https : http;
 
       // Download to temporary file
-      const tempPath = path.join(this.cache.cacheDir, `.download-${Date.now()}`);
+      const tempPath = path.join(this.cache.cacheDir, tempName);
       const fileStream = createWriteStream(tempPath);
 
       await new Promise((resolve, reject) => {

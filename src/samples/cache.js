@@ -361,4 +361,38 @@ export class SampleCache {
     const hash = this._hashBuffer(data);
     return hash === meta.hash;
   }
+
+  /**
+   * Verify all cached samples and packs.
+   * @returns {Promise<Array>} Array of { path, ok, error }
+   */
+  async verifyAll() {
+    await this._ensureCacheDir();
+    await this._loadManifest();
+    const results = [];
+
+    for (const [samplePath] of Object.entries(this.manifest.samples)) {
+      try {
+        const ok = await this.verifySample(samplePath);
+        results.push({ path: samplePath, ok });
+      } catch (error) {
+        results.push({ path: samplePath, ok: false, error: error.message });
+      }
+    }
+
+    for (const [url, packMeta] of Object.entries(this.manifest.packs || {})) {
+      const packPath = packMeta.path;
+      try {
+        const abs = this.getCachedPath(packPath) || path.join(this.cacheDir, packPath);
+        const data = await fs.readFile(abs);
+        const hash = this._hashBuffer(data);
+        const ok = packMeta.hash ? hash === packMeta.hash : true;
+        results.push({ path: packPath, url, ok });
+      } catch (error) {
+        results.push({ path: packPath, url, ok: false, error: error.message });
+      }
+    }
+
+    return results;
+  }
 }
