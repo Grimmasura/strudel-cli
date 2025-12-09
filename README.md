@@ -215,8 +215,21 @@ strudel-cli/
 - ✅ Terminal REPL with completion/visualizer + hush/bpm/status/metrics
 - ✅ Sample cache with hashes/manifest and verify/clear/stats commands
 - ✅ Sample downloader with resume, checksum verification, and archive extraction
-- ⏳ Web mode (Puppeteer) – fallback/stub in tests
+- ✅ Web mode fallback when Puppeteer is missing (stub)
+- ⏳ Native streaming backends beyond spawn (JACK/ALSA/Pulse richer clients)
+- ⏳ Multi-pattern audio scheduling/sample output (beyond sine synthesis)
+- ⏳ Web mode (Puppeteer) – full playback + automation
 - ⏳ Sample server
+- ⏳ Live metrics from real engine (CPU/latency) and sample/pack registry
+
+### Alpha Remaining Checklist
+
+- Upgrade JACK/ALSA/Pulse to streaming clients (not just spawn) with stable clocks
+- Route Strudel patterns to real sample/audio output (multi-pattern, packs)
+- Finalize web mode with Puppeteer playback + stable headless fallback
+- Implement sample server/registry flows and CLI doctor/init for deps
+- Report real backend metrics (CPU/latency) in REPL/visualizer
+- Harden downloader for retries/throttling and pack signing
 
 ### Phase 2: Audio Backends (Q1 2026)
 
