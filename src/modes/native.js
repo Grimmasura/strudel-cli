@@ -1,5 +1,5 @@
 /**
- * NativeMode - Native audio backend execution mode (ALSA/JACK/Pulse)
+ * NativeMode - Native audio backend execution mode (PipeWire/ALSA/JACK/Pulse)
  *
  * Uses native Linux audio backends for low-latency pattern playback.
  * Phase 1 MVP: Basic ALSA backend foundation with pattern evaluation stub.
@@ -12,6 +12,8 @@
 import { BaseMode } from './base.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { PipeWireBackend } from '../audio/backends/pipewire.js';
+import { PatternEvaluator } from '../patterns/evaluator.js';
 
 const execAsync = promisify(exec);
 
@@ -25,6 +27,7 @@ export class NativeMode extends BaseMode {
     super('native', config, logger);
     this.audioContext = null;
     this.backend = null;
+    this.audioBackend = null;
     this.evaluator = null;
     this.isPlaying = false;
     this.currentPattern = null;
@@ -47,6 +50,12 @@ export class NativeMode extends BaseMode {
 
       // Phase 1 MVP: Create minimal audio context foundation
       this.audioContext = this._createMinimalAudioContext();
+
+      // Initialize backend driver if PipeWire selected
+      if (this.backend === 'pipewire') {
+        this.audioBackend = new PipeWireBackend(this.config, this.logger);
+        await this.audioBackend.initialize();
+      }
 
       // Phase 1 MVP: Pattern evaluator stub (full implementation in Phase 2)
       this.evaluator = this._createPatternEvaluator();
@@ -71,6 +80,9 @@ export class NativeMode extends BaseMode {
       throw new Error('NativeMode not initialized. Call initialize() first.');
     }
 
+    // Validate before logging substring to avoid null access
+    this._validatePattern(code);
+
     this.logger.info('Playing pattern in Native mode');
     this.logger.debug(`Pattern code: ${code.substring(0, 100)}...`);
     this.logger.warn('Phase 1 MVP: Pattern evaluation is stubbed (full implementation in Phase 2)');
@@ -78,9 +90,6 @@ export class NativeMode extends BaseMode {
     try {
       // Store current pattern
       this.currentPattern = code;
-
-      // Phase 1 MVP: Validate pattern syntax (basic check)
-      this._validatePattern(code);
 
       // Phase 1 MVP: Pattern evaluation stub
       // Full implementation requires @strudel/core integration in Phase 2
@@ -111,6 +120,10 @@ export class NativeMode extends BaseMode {
       // Phase 1 MVP: Stop pattern evaluation
       if (this.evaluator) {
         await this.evaluator.stop();
+      }
+
+      if (this.audioBackend) {
+        await this.audioBackend.stop();
       }
 
       this.isPlaying = false;
@@ -149,6 +162,16 @@ export class NativeMode extends BaseMode {
       }
     }
 
+    if (this.audioBackend) {
+      try {
+        await this.audioBackend.cleanup();
+        this.logger.debug('Audio backend cleaned up');
+      } catch (error) {
+        this.logger.warn(`Error cleaning up audio backend: ${error.message}`);
+      }
+      this.audioBackend = null;
+    }
+
     this.backend = null;
     this.isPlaying = false;
     this.currentPattern = null;
@@ -164,6 +187,7 @@ export class NativeMode extends BaseMode {
       isPlaying: this.isPlaying,
       backend: this.backend,
       audioContextActive: this.audioContext !== null,
+      audioBackendActive: this.audioBackend !== null,
       evaluatorActive: this.evaluator !== null,
       sampleRate: this.audioContext?.sampleRate || null,
       currentPattern: this.currentPattern ? this.currentPattern.substring(0, 50) + '...' : null
@@ -172,7 +196,7 @@ export class NativeMode extends BaseMode {
 
   /**
    * Select audio backend based on availability and preference
-   * @param {string} requestedBackend - Requested backend (auto|alsa|jack|pulse)
+   * @param {string} requestedBackend - Requested backend (auto|pipewire|alsa|jack|pulse)
    * @returns {Promise<string>} Selected backend name
    * @private
    */
@@ -189,8 +213,8 @@ export class NativeMode extends BaseMode {
       }
     }
 
-    // Auto-detect optimal backend (priority: JACK > ALSA > PulseAudio)
-    const backends = ['jack', 'alsa', 'pulse'];
+    // Auto-detect optimal backend (priority: PipeWire > JACK > ALSA > PulseAudio)
+    const backends = ['pipewire', 'jack', 'alsa', 'pulse'];
     for (const backend of backends) {
       const available = await this._checkBackendAvailable(backend);
       if (available) {
@@ -200,20 +224,23 @@ export class NativeMode extends BaseMode {
     }
 
     throw new Error(
-      'No native audio backend available. Please install ALSA, JACK, or PulseAudio.\n' +
+      'No native audio backend available. Please install PipeWire, ALSA, JACK, or PulseAudio.\n' +
       'Or use web mode: strudel repl --mode web'
     );
   }
 
   /**
    * Check if audio backend is available on system
-   * @param {string} backend - Backend to check (alsa|jack|pulse)
+   * @param {string} backend - Backend to check (pipewire|alsa|jack|pulse)
    * @returns {Promise<boolean>} Backend availability
    * @private
    */
   async _checkBackendAvailable(backend) {
     try {
       switch (backend) {
+        case 'pipewire':
+          return PipeWireBackend.isAvailable();
+
         case 'alsa':
           // Check for ALSA utilities
           await execAsync('which aplay');
@@ -288,23 +315,8 @@ export class NativeMode extends BaseMode {
    * @private
    */
   _createPatternEvaluator() {
-    this.logger.debug('Creating pattern evaluator (Phase 1 MVP stub)');
-
-    // Phase 1 MVP: Return stub evaluator
-    // Phase 2 will integrate @strudel/core for actual evaluation
-    return {
-      evaluate: async (code) => {
-        this.logger.debug(`Evaluator stub: would evaluate pattern (${code.length} chars)`);
-        // Simulate pattern acceptance
-        return { success: true, message: 'Pattern accepted (Phase 1 stub)' };
-      },
-      stop: async () => {
-        this.logger.debug('Evaluator stub: stopping pattern');
-      },
-      cleanup: async () => {
-        this.logger.debug('Evaluator stub: cleanup');
-      }
-    };
+    this.logger.debug('Creating pattern evaluator (vm2 sandbox)');
+    return new PatternEvaluator(this.audioContext, this.logger);
   }
 
   /**

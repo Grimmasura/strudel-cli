@@ -190,7 +190,9 @@ export class Orchestrator {
     this.logger.info('Cleaning up Orchestrator...');
 
     if (this.currentMode) {
-      await this.currentMode.cleanup();
+      if (typeof this.currentMode.cleanup === 'function') {
+        await this.currentMode.cleanup();
+      }
       this.currentMode = null;
     }
 

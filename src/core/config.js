@@ -13,9 +13,13 @@ dotenvConfig();
 
 export class Config {
   constructor(options = {}) {
+    const isTestEnv = process.env.VITEST || process.env.NODE_ENV === 'test';
+    const testSuffix = isTestEnv ? `-test-${process.pid}-${Math.random().toString(36).slice(2, 8)}` : undefined;
     this.store = new Conf({
       projectName: 'strudel-cli',
-      defaults: this.getDefaults()
+      projectSuffix: testSuffix,
+      defaults: this.getDefaults(),
+      ...options.confOptions
     });
   }
 

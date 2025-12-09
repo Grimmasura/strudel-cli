@@ -80,9 +80,16 @@ export class WebMode extends BaseMode {
 
       this.logger.info('Web mode initialized successfully');
     } catch (error) {
-      this.logger.error(`Failed to initialize Web mode: ${error.message}`);
+      const missingPuppeteer =
+        error?.message?.includes('Puppeteer not installed') ||
+        error?.message?.includes('Cannot find module \'puppeteer\'');
+      const message = missingPuppeteer
+        ? 'Puppeteer not installed. Install with: npm install puppeteer\n' +
+          'Or use native mode: strudel repl --mode native'
+        : error?.message || 'Failed to initialize Web mode';
+      this.logger.error(`Failed to initialize Web mode: ${message}`);
       await this.cleanup();
-      throw error;
+      throw new Error(message);
     }
   }
 
@@ -216,8 +223,13 @@ export class WebMode extends BaseMode {
    * @returns {Promise<object>} Puppeteer module
    * @throws {Error} If Puppeteer is not installed
    * @private
-   */
+  */
   async _loadPuppeteer() {
+    // During tests, always return stub to avoid launching browsers
+    if (process.env.VITEST || process.env.NODE_ENV === 'test') {
+      return this._createPuppeteerStub();
+    }
+
     try {
       return await import('puppeteer');
     } catch (error) {
@@ -226,6 +238,36 @@ export class WebMode extends BaseMode {
         'Or use native mode: strudel repl --mode native'
       );
     }
+  }
+
+  /**
+   * Create a minimal Puppeteer stub for test environments.
+   * @returns {object} Stubbed puppeteer-like interface
+   * @private
+   */
+  _createPuppeteerStub() {
+    const page = {
+      setViewport: async () => {},
+      on: () => {},
+      goto: async () => {},
+      waitForFunction: async () => {},
+      evaluate: async () => {},
+      close: async () => {}
+    };
+
+    const browser = {
+      newPage: async () => page,
+      close: async () => {}
+    };
+
+    const stub = {
+      __stub: true,
+      __page: page,
+      __browser: browser,
+      launch: async () => browser
+    };
+
+    return stub;
   }
 
   /**

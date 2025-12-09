@@ -12,6 +12,7 @@ import fs from 'fs/promises';
 import { mkdtempSync } from 'fs';
 import os from 'os';
 import path from 'path';
+import crypto from 'crypto';
 
 describe('SampleServer', () => {
   let server;
@@ -309,7 +310,37 @@ describe('SampleCache', () => {
 
       expect(stats.totalSamples).toBe(2);
       expect(stats.totalSize).toBe(3000);
-      expect(parseFloat(stats.totalSizeMB)).toBeGreaterThan(0);
+      expect(stats.totalSizeMB).toBeGreaterThan(0);
+      expect(stats.usagePercent).toBeGreaterThan(0);
+    });
+  });
+
+  describe('url mapping and verification', () => {
+    beforeEach(async () => {
+      await cache.initialize();
+    });
+
+    it('should set and get by URL', async () => {
+      const data = Buffer.from('hello');
+      const url = 'https://example.com/audio/hello.wav';
+
+      const cachedPath = await cache.setByUrl(url, data);
+      expect(cachedPath).toContain('hello.wav');
+
+      const loaded = await cache.getByUrl(url);
+      expect(loaded?.toString()).toBe('hello');
+    });
+
+    it('should verify sample hash', async () => {
+      await cache.addSample('test/hash.wav', Buffer.from('abc123'));
+      const ok = await cache.verifySample('test/hash.wav');
+      expect(ok).toBe(true);
+
+      // Corrupt file
+      const abs = cache.getCachedPath('test/hash.wav');
+      await fs.writeFile(abs, 'corrupt');
+      const okAfter = await cache.verifySample('test/hash.wav');
+      expect(okAfter).toBe(false);
     });
   });
 
@@ -387,10 +418,23 @@ describe('SampleDownloader', () => {
       expect(isInstalled).toBe(false);
     });
 
-    it('should throw error for pack download (Phase 1 stub)', async () => {
-      await expect(
-        downloader.downloadPack('https://example.com/pack.zip')
-      ).rejects.toThrow(/not yet implemented/);
+    it('should download pack metadata into manifest with hash', async () => {
+      const url = 'https://example.com/pack.zip';
+      const data = Buffer.from('pack-data');
+      const expectedHash = crypto.createHash('sha256').update(data).digest('hex');
+
+      // Mock the private _streamToFile to write test data without network
+      const streamSpy = vi.spyOn(downloader, '_streamToFile').mockImplementation(async (_u, dest) => {
+        await fs.mkdir(path.dirname(dest), { recursive: true });
+        await fs.writeFile(dest, data);
+      });
+
+      const savedPath = await downloader.downloadPack(url, { expectedHash });
+      const savedData = await fs.readFile(savedPath);
+      expect(savedData.toString()).toBe('pack-data');
+      expect(downloader.cache.manifest.urls[url]).toContain('pack.zip');
+      expect(downloader.cache.manifest.packs[url].hash).toBe(expectedHash);
+      expect(streamSpy).toHaveBeenCalled();
     });
   });
 

@@ -14,6 +14,7 @@ import http from 'http';
 import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 export class SampleDownloader {
   /**
@@ -27,6 +28,7 @@ export class SampleDownloader {
     this.logger = logger;
     this.cache = cache;
     this.autoDownload = config.get('samples.autoDownload') || false;
+    this.concurrent = config.get('samples.concurrentDownloads') || 2;
   }
 
   /**
@@ -37,20 +39,34 @@ export class SampleDownloader {
    */
   async downloadPack(url, options = {}) {
     this.logger.info(`Downloading sample pack: ${url}`);
-    this.logger.warn('Phase 1 MVP: Sample download functionality is stubbed');
 
-    // Phase 1 MVP: Stub implementation
-    // Phase 2 will implement:
-    // - HTTP/HTTPS download with progress
-    // - Archive extraction (zip, tar.gz)
-    // - Integrity verification (checksums)
-    // - Resumable downloads
-    // - Concurrent downloads
+    // Basic streaming download to cache root under packs/
+    const destDir = path.join('packs', path.basename(url));
+    await this._ensureCacheInitialized();
+    const targetPath = path.join(destDir, path.basename(url));
+    const absPath = path.join(this.cache.cacheDir, targetPath);
 
-    throw new Error(
-      'Sample pack download not yet implemented (Phase 2)\n' +
-      'Please manually download samples to: ' + this.cache.cacheDir
-    );
+    await this._streamToFile(url, absPath, options.progress);
+
+    // Verify checksum if provided
+    const data = await fs.readFile(absPath);
+    const hash = this._hashBuffer(data);
+    if (options.expectedHash && options.expectedHash !== hash) {
+      await fs.unlink(absPath).catch(() => {});
+      throw new Error('Downloaded pack failed checksum verification');
+    }
+
+    // Update manifest entry for pack
+    const now = new Date().toISOString();
+    this.cache.manifest.urls[url] = targetPath;
+    this.cache.manifest.packs[url] = {
+      path: targetPath,
+      hash,
+      downloadedAt: now
+    };
+    await this.cache._saveManifest();
+
+    return absPath;
   }
 
   /**
@@ -64,6 +80,7 @@ export class SampleDownloader {
     this.logger.debug(`Downloading sample: ${url}`);
 
     try {
+      await this._ensureCacheInitialized();
       // Determine protocol
       const protocol = url.startsWith('https') ? https : http;
 
@@ -100,6 +117,8 @@ export class SampleDownloader {
 
       // Add to cache
       const cachedPath = await this.cache.addSample(destination, data);
+      this.cache.manifest.urls[url] = destination;
+      await this.cache._saveManifest();
 
       // Remove temporary file
       await fs.unlink(tempPath);
@@ -167,7 +186,63 @@ export class SampleDownloader {
   getState() {
     return {
       autoDownload: this.autoDownload,
-      cacheDir: this.cache.cacheDir
+      cacheDir: this.cache.cacheDir,
+      concurrent: this.concurrent
     };
+  }
+
+  /**
+   * Stream a remote file to disk with optional progress callback.
+   * @private
+   */
+  async _streamToFile(url, destPath, onProgress) {
+    const protocol = url.startsWith('https') ? https : http;
+    const dir = path.dirname(destPath);
+    await fs.mkdir(dir, { recursive: true });
+
+    await new Promise((resolve, reject) => {
+      const fileStream = createWriteStream(destPath);
+      protocol.get(url, (response) => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+          return;
+        }
+        const total = Number(response.headers['content-length'] || 0);
+        let downloaded = 0;
+        response.on('data', (chunk) => {
+          downloaded += chunk.length;
+          if (typeof onProgress === 'function' && total > 0) {
+            onProgress({ downloaded, total, percent: (downloaded / total) * 100 });
+          }
+        });
+
+        response.pipe(fileStream);
+        fileStream.on('finish', () => {
+          fileStream.close();
+          resolve();
+        });
+        fileStream.on('error', (err) => {
+          fs.unlink(destPath).catch(() => {});
+          reject(err);
+        });
+      }).on('error', (err) => {
+        fs.unlink(destPath).catch(() => {});
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Ensure cache is initialized before downloads.
+   * @private
+   */
+  async _ensureCacheInitialized() {
+    if (!this.cache.manifest) {
+      await this.cache.initialize();
+    }
+  }
+
+  _hashBuffer(data) {
+    return crypto.createHash('sha256').update(data).digest('hex');
   }
 }

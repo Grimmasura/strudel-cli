@@ -10,6 +10,7 @@ export { Orchestrator } from './core/orchestrator.js';
 export { Config } from './core/config.js';
 export { Logger } from './core/logger.js';
 export { Detector } from './core/detector.js';
+export { PatternEvaluator, PatternEvaluationError } from './patterns/evaluator.js';
 
 export { BaseMode } from './modes/base.js';
 export { WebMode } from './modes/web.js';

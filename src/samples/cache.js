@@ -12,6 +12,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { existsSync } from 'fs';
+import crypto from 'crypto';
 
 export class SampleCache {
   /**
@@ -84,10 +85,12 @@ export class SampleCache {
 
     // Update manifest
     const stats = await fs.stat(cachedPath);
+    const now = new Date().toISOString();
     this.manifest.samples[samplePath] = {
       size: stats.size,
-      cachedAt: new Date().toISOString(),
-      lastAccessed: new Date().toISOString()
+      hash: this._hashBuffer(data),
+      cachedAt: now,
+      lastAccessed: now
     };
 
     await this._saveManifest();
@@ -111,6 +114,14 @@ export class SampleCache {
     if (existsSync(cachedPath)) {
       await fs.unlink(cachedPath);
       delete this.manifest.samples[samplePath];
+      // Remove URL mappings that pointed here
+      if (this.manifest.urls) {
+        for (const [url, mappedPath] of Object.entries(this.manifest.urls)) {
+          if (mappedPath === samplePath) {
+            delete this.manifest.urls[url];
+          }
+        }
+      }
       await this._saveManifest();
       this.logger.debug(`Sample removed from cache: ${samplePath}`);
     }
@@ -140,15 +151,17 @@ export class SampleCache {
       totalSize += this.manifest.samples[sample].size || 0;
     }
 
-    const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
-    const usagePercent = ((totalSize / (this.maxSizeMB * 1024 * 1024)) * 100).toFixed(1);
+    const totalSizeMB = totalSize / (1024 * 1024);
+    const usagePercent = this.maxSizeMB > 0
+      ? (totalSize / (this.maxSizeMB * 1024 * 1024)) * 100
+      : 0;
 
     return {
       totalSamples: samples.length,
       totalSize,
-      totalSizeMB,
+      totalSizeMB: Number(totalSizeMB.toFixed(4)),
       maxSizeMB: this.maxSizeMB,
-      usagePercent,
+      usagePercent: Number(usagePercent.toFixed(6)),
       cacheDir: this.cacheDir
     };
   }
@@ -263,7 +276,9 @@ export class SampleCache {
     return {
       version: '1.0.0',
       createdAt: new Date().toISOString(),
-      samples: {}
+      samples: {},
+      urls: {},
+      packs: {}
     };
   }
 
@@ -287,5 +302,63 @@ export class SampleCache {
       this.logger.debug(`Creating cache directory: ${this.cacheDir}`);
       await fs.mkdir(this.cacheDir, { recursive: true });
     }
+  }
+
+  /**
+   * Compute SHA256 hash for a buffer
+   * @param {Buffer|string} data
+   * @returns {string}
+   * @private
+   */
+  _hashBuffer(data) {
+    return crypto.createHash('sha256').update(data).digest('hex');
+  }
+
+  /**
+   * Retrieve sample by URL if present in manifest.
+   * @param {string} url
+   * @returns {Promise<Buffer|null>}
+   */
+  async getByUrl(url) {
+    const relativePath = this.manifest.urls?.[url];
+    if (!relativePath) {
+      return null;
+    }
+    const absPath = this.getCachedPath(relativePath);
+    if (!absPath) {
+      return null;
+    }
+    await this.updateAccessTime(relativePath);
+    return fs.readFile(absPath);
+  }
+
+  /**
+   * Store a sample by URL with automatic path selection.
+   * @param {string} url
+   * @param {Buffer|string} data
+   * @returns {Promise<string>} absolute cached path
+   */
+  async setByUrl(url, data) {
+    const filename = path.basename(new URL(url).pathname) || `sample-${Date.now()}`;
+    const relativePath = path.join('remote', filename);
+    const cachedPath = await this.addSample(relativePath, data);
+    this.manifest.urls[url] = relativePath;
+    await this._saveManifest();
+    return cachedPath;
+  }
+
+  /**
+   * Verify a cached sample against its recorded hash.
+   * @param {string} samplePath
+   * @returns {Promise<boolean>}
+   */
+  async verifySample(samplePath) {
+    const meta = this.manifest.samples[samplePath];
+    if (!meta) return false;
+    const absPath = this.getCachedPath(samplePath);
+    if (!absPath) return false;
+    const data = await fs.readFile(absPath);
+    const hash = this._hashBuffer(data);
+    return hash === meta.hash;
   }
 }
