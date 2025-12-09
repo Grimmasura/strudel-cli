@@ -16,6 +16,11 @@ import { Logger } from './core/logger.js';
 import { SampleCache } from './samples/cache.js';
 import { Orchestrator } from './core/orchestrator.js';
 import { SampleDownloader } from './samples/downloader.js';
+import { SampleServer } from './samples/server.js';
+import { PipeWireBackend } from './audio/backends/pipewire.js';
+import { AlsaBackend } from './audio/backends/alsa.js';
+import { PulseAudioBackend } from './audio/backends/pulse.js';
+import { JackBackend } from './audio/backends/jack.js';
 
 /**
  * Main CLI function
@@ -102,14 +107,24 @@ export async function cli(argv) {
     .option('-h, --host <host>', 'Server host', '0.0.0.0')
     .option('-s, --samples <path>', 'Samples directory')
     .action(async (options) => {
-      console.log(chalk.blue('🌐 Strudel CLI - Server Mode'));
-      console.log(chalk.gray(`Host: ${options.host}:${options.port}`));
-      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+      const globalOptions = program.opts();
+      const config = new Config();
+      const logger = new Logger({ verbose: globalOptions.verbose, quiet: globalOptions.quiet });
+      if (options.samples) {
+        config.set('samples.localPath', options.samples);
+      }
+      if (options.port) {
+        config.set('samples.serverPort', Number(options.port));
+      }
 
-      // TODO: Import and use Server
-      // const { SampleServer } = await import('./samples/server.js');
-      // const server = new SampleServer(options);
-      // await server.start();
+      const server = new SampleServer(config, logger);
+      try {
+        await server.start({ port: Number(options.port) });
+        logger.info('Press Ctrl+C to stop the server.');
+      } catch (error) {
+        logger.error(`Failed to start sample server: ${error.message}`);
+        process.exitCode = 1;
+      }
     });
 
   // Command: init
@@ -119,13 +134,28 @@ export async function cli(argv) {
     .option('--samples', 'Download default sample packs')
     .option('--config <preset>', 'Use configuration preset')
     .action(async (options) => {
-      console.log(chalk.blue('🚀 Strudel CLI - Initialize'));
-      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+      const globalOptions = program.opts();
+      const config = new Config();
+      const logger = new Logger({ verbose: globalOptions.verbose, quiet: globalOptions.quiet });
+      const cache = new SampleCache(config, logger);
+      const downloader = new SampleDownloader(config, logger, cache);
 
-      // TODO: Implement initialization
-      // - Create config directory
-      // - Download samples if requested
-      // - Apply configuration preset
+      logger.info('Initializing Strudel environment...');
+      await cache.initialize();
+
+      if (options.samples) {
+        logger.info('Downloading default sample pack (Dirt-Samples)...');
+        const defaultPack =
+          'https://github.com/tidalcycles/Dirt-Samples/archive/refs/heads/master.zip';
+        try {
+          await downloader.downloadPack(defaultPack, { extract: true });
+          logger.info('Default samples downloaded.');
+        } catch (error) {
+          logger.warn(`Sample download failed: ${error.message}`);
+        }
+      }
+
+      logger.info('Initialization complete.');
     });
 
   // Command: config
@@ -215,14 +245,46 @@ export async function cli(argv) {
     .command('doctor')
     .description('Run system diagnostics')
     .action(async (options) => {
-      console.log(chalk.blue('🏥 Strudel CLI - System Diagnostics'));
-      console.log(chalk.yellow('\n⚠️  Implementation pending (Phase 1)'));
+      const config = new Config();
+      const logger = new Logger();
+      const cache = new SampleCache(config, logger);
 
-      // TODO: Implement system diagnostics
-      // - Check Node.js version
-      // - Detect available audio backends
-      // - Test sample access
-      // - Verify dependencies
+      const checks = [];
+
+      checks.push({
+        name: 'Node version',
+        ok: parseInt(process.versions.node.split('.')[0], 10) >= 20,
+        detail: process.versions.node
+      });
+
+      const backendChecks = await Promise.all([
+        PipeWireBackend.isAvailable().then((ok) => ({ name: 'PipeWire', ok })),
+        AlsaBackend.isAvailable().then((ok) => ({ name: 'ALSA', ok })),
+        PulseAudioBackend.isAvailable().then((ok) => ({ name: 'PulseAudio', ok })),
+        JackBackend.isAvailable().then((ok) => ({ name: 'JACK', ok }))
+      ]);
+      checks.push(...backendChecks);
+
+      const puppeteerOk = await import('puppeteer')
+        .then(() => true)
+        .catch(() => false);
+      checks.push({ name: 'Puppeteer installed', ok: puppeteerOk });
+
+      await cache.initialize();
+      const stats = await cache.getStats();
+      checks.push({
+        name: 'Sample cache',
+        ok: true,
+        detail: `${stats.totalSamples} samples, ${stats.totalSizeMB}MB`
+      });
+
+      console.log(chalk.bold('\n🏥 Strudel CLI - System Diagnostics\n'));
+      checks.forEach((check) => {
+        const status = check.ok ? chalk.green('✓') : chalk.red('✗');
+        const detail = check.detail ? ` (${check.detail})` : '';
+        console.log(`${status} ${check.name}${detail}`);
+      });
+      console.log();
     });
 
   // Parse arguments
