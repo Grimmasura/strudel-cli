@@ -50,21 +50,22 @@
   "dependencies": {
     "@strudel/core": "^1.0.0",
     "@strudel/mini": "^1.0.0",
-    "@strudel/transpiler": "^1.0.0",
     "@strudel/tonal": "^1.0.0",
-    "commander": "^11.0.0",
-    "inquirer": "^9.0.0",
+    "@strudel/transpiler": "^1.0.0",
     "chalk": "^5.0.0",
-    "ora": "^7.0.0",
+    "commander": "^11.0.0",
     "conf": "^12.0.0",
     "dotenv": "^16.0.0",
+    "inquirer": "^9.0.0",
+    "ora": "^7.0.0",
     "pino": "^8.0.0",
-    "pino-pretty": "^10.0.0"
+    "pino-pretty": "^10.0.0",
+    "vm2": "^3.10.0"
   },
   "optionalDependencies": {
-    "puppeteer": "^21.0.0",
     "node-jack": "^0.1.0",
-    "pulseaudio": "^0.1.0"
+    "pulseaudio": "^0.1.0",
+    "puppeteer": "^21.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -72,11 +73,11 @@
     "eslint": "^8.0.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-plugin-import": "^2.0.0",
-    "prettier": "^3.0.0",
-    "lint-staged": "^14.0.0",
-    "vitest": "^1.0.0",
     "jsdoc": "^4.0.0",
-    "pkg": "^5.8.0"
+    "lint-staged": "^14.0.0",
+    "pkg": "^5.8.0",
+    "prettier": "^3.0.0",
+    "vitest": "^1.0.0"
   },
   "lint-staged": {
     "*.js": [

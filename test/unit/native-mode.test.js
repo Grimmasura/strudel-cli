@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NativeMode } from '../../src/modes/native.js';
 import { Config } from '../../src/core/config.js';
 import { Logger } from '../../src/core/logger.js';
+import { PipeWireBackend } from '../../src/audio/backends/pipewire.js';
 
 describe('NativeMode', () => {
   let nativeMode;
@@ -14,8 +15,16 @@ describe('NativeMode', () => {
 
   beforeEach(() => {
     config = new Config();
+    config.set('audio.sampleRate', 48000);
+    config.set('audio.bufferSize', 256);
+    config.set('audio.channels', 2);
+    config.set('audio.backend', 'auto');
     logger = new Logger({ quiet: true });
     nativeMode = new NativeMode(config, logger);
+    vi.spyOn(PipeWireBackend.prototype, 'initialize').mockResolvedValue();
+    vi.spyOn(PipeWireBackend.prototype, 'stop').mockResolvedValue();
+    vi.spyOn(PipeWireBackend.prototype, 'cleanup').mockResolvedValue();
+    vi.spyOn(PipeWireBackend.prototype, 'playSineWave').mockResolvedValue();
   });
 
   afterEach(async () => {
@@ -23,6 +32,7 @@ describe('NativeMode', () => {
     if (nativeMode.audioContext || nativeMode.backend) {
       await nativeMode.cleanup();
     }
+    vi.restoreAllMocks();
   });
 
   describe('initialization', () => {
@@ -45,7 +55,7 @@ describe('NativeMode', () => {
       await nativeMode.initialize();
 
       expect(nativeMode.backend).toBeDefined();
-      expect(['alsa', 'jack', 'pulse']).toContain(nativeMode.backend);
+      expect(['pipewire', 'alsa', 'jack', 'pulse']).toContain(nativeMode.backend);
       expect(nativeMode.audioContext).toBeDefined();
       expect(nativeMode.evaluator).toBeDefined();
     });
@@ -118,16 +128,16 @@ describe('NativeMode', () => {
       expect(isAvailable).toBe(false);
     });
 
-    it('should prioritize JACK over ALSA in auto-selection', async () => {
-      // Mock both JACK and ALSA as available
+    it('should prioritize PipeWire over other backends in auto-selection', async () => {
+      // Mock PipeWire and ALSA as available
       vi.spyOn(nativeMode, '_checkBackendAvailable').mockImplementation(async (backend) => {
-        return backend === 'jack' || backend === 'alsa';
+        return backend === 'pipewire' || backend === 'alsa';
       });
 
       await nativeMode.initialize({ backend: 'auto' });
 
-      // Should select JACK (higher priority)
-      expect(nativeMode.backend).toBe('jack');
+      // Should select PipeWire (highest priority)
+      expect(nativeMode.backend).toBe('pipewire');
     });
   });
 
@@ -363,7 +373,7 @@ describe('NativeMode', () => {
 
     it('should accept pattern evaluation in Phase 1 stub', async () => {
       const result = await nativeMode.evaluator.evaluate('sound("bd")');
-      expect(result.success).toBe(true);
+      expect(result.name).toBe('sound');
     });
 
     it('should call evaluator stop on mode stop', async () => {

@@ -12,6 +12,7 @@
 import readline from 'readline';
 import { createInterface } from 'readline';
 import chalk from 'chalk';
+import { TerminalVisualizer } from './visualizer.js';
 
 export class REPL {
   /**
@@ -21,13 +22,32 @@ export class REPL {
    */
   constructor(orchestrator, options = {}) {
     this.orchestrator = orchestrator;
-    this.options = options;
+    this.options = {
+      historySize: options.historySize || 1000,
+      showBanner: options.showBanner !== undefined ? options.showBanner : true,
+      visualize: options.visualize || false,
+      completions: options.completions || null
+    };
     this.rl = null;
     this.isRunning = false;
     this.currentPattern = null;
     this.commandHistory = [];
     this.multilineBuffer = [];
     this.inMultilineMode = false;
+    this.visualizer = new TerminalVisualizer({ enabled: this.options.visualize, logger: orchestrator.logger });
+    this.strudelCompletions = this.options.completions || [
+      'note',
+      'sound',
+      's',
+      'fast',
+      'slow',
+      'stack',
+      'hush',
+      'every',
+      'sometimes',
+      'rev',
+      'degradeBy'
+    ];
 
     // REPL commands
     this.commands = {
@@ -58,7 +78,8 @@ export class REPL {
       input: process.stdin,
       output: process.stdout,
       prompt: this._getPrompt(),
-      historySize: this.options.historySize || 1000
+      historySize: this.options.historySize,
+      completer: this._completer.bind(this)
     });
 
     // Setup readline event handlers
@@ -100,9 +121,10 @@ export class REPL {
       }
 
       // Check for multiline continuation
-      if (trimmed.endsWith('\\')) {
+      if (this._needsContinuation(trimmed)) {
         this.inMultilineMode = true;
-        this.multilineBuffer.push(trimmed.slice(0, -1));
+        const lineWithoutEscape = trimmed.endsWith('\\') ? trimmed.slice(0, -1) : trimmed;
+        this.multilineBuffer.push(lineWithoutEscape);
         this.rl.setPrompt('... ');
         this.rl.prompt();
         return;
@@ -190,6 +212,7 @@ export class REPL {
 
       this.currentPattern = code;
       console.log(chalk.green('✓ Pattern playing'));
+      this._renderVisualization(code);
     } catch (error) {
       console.log(chalk.red(`✗ Error: ${error.message}`));
       this.orchestrator.logger.debug(`Pattern evaluation error: ${error.stack}`);
@@ -379,24 +402,76 @@ export class REPL {
   }
 
   /**
+   * Render visualization if enabled
+   * @param {string} pattern
+   * @private
+   */
+  _renderVisualization(pattern) {
+    if (!this.options.visualize) {
+      return;
+    }
+    const state = this.orchestrator.currentMode?.getState?.() || {};
+    const latency = state.latencyMs || this.orchestrator.config?.get?.('audio.latency') || null;
+    this.visualizer.render({
+      pattern,
+      cycle: state.cycle || 0,
+      bpm: state.bpm || 120,
+      cpu: state.cpu || 0,
+      latencyMs: latency,
+      playing: state.isPlaying || false
+    });
+  }
+
+  /**
+   * Provide tab completions for commands and common pattern functions
+   * @param {string} line
+   * @returns {[string[], string]}
+   * @private
+   */
+  _completer(line) {
+    const commandKeys = Object.keys(this.commands);
+    const completions = [...commandKeys, ...this.strudelCompletions];
+    const hits = completions.filter(c => c.startsWith(line));
+    return [hits.length ? hits : completions, line];
+  }
+
+  /**
+   * Determine if input requires multiline continuation
+   * @param {string} input
+   * @returns {boolean}
+   * @private
+   */
+  _needsContinuation(input) {
+    if (input.endsWith('\\')) {
+      return true;
+    }
+    // Simple bracket balance check
+    const open = (input.match(/[\(\[\{]/g) || []).length;
+    const close = (input.match(/[\)\]\}]/g) || []).length;
+    return open > close;
+  }
+
+  /**
    * Cleanup REPL resources
    * @private
    */
   async _cleanup() {
-    this.isRunning = false;
-
-    // Stop any playing patterns
     try {
-      await this.orchestrator.stop();
-    } catch (error) {
-      // Ignore cleanup errors
-    }
+      this.isRunning = false;
 
-    // Cleanup orchestrator
-    try {
-      await this.orchestrator.cleanup();
+      // Stop any playing patterns
+      await Promise.resolve(this.orchestrator.stop()).catch(() => {});
+
+      // Cleanup orchestrator
+      await Promise.resolve(this.orchestrator.cleanup()).catch(() => {});
+
+      // Ensure afterEach hooks or callers do not attempt duplicate cleanup
+      if (this.orchestrator) {
+        this.orchestrator.isInitialized = false;
+      }
     } catch (error) {
-      // Ignore cleanup errors
+      // Last-resort swallow to avoid bubbling during shutdown
+      this.orchestrator.logger?.debug?.(`REPL cleanup swallow: ${error.message}`);
     }
   }
 }
